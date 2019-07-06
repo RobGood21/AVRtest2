@@ -1,0 +1,9 @@
+programmeren attiny85
+via arduino arduino as ISP (in system programmer)
+Eerst de arduino schetch uit voorbeeld ISP programmeren.
+Daarna board op attiny en in vmicro uploader programmer arduino as ISP kiezen
+onduidelijk:
+functie boorloader, of hiermee alleen enkele fuses aanpassen in de attiny?
+elco tussen reset en gnd
+C code geeft fout aanduidingen maar worden wel gecompileerd
+Interupt vect getest werkt.
