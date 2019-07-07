@@ -7,3 +7,5 @@ functie boorloader, of hiermee alleen enkele fuses aanpassen in de attiny?
 elco tussen reset en gnd
 C code geeft fout aanduidingen maar worden wel gecompileerd
 Interupt vect getest werkt.
+timer 1 op ongeveer 1ms (denk ik) volgens berekening. Output naar shiftregister
+Input op 165 piso shiftregister maken. 
