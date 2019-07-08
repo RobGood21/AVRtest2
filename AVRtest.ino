@@ -9,8 +9,9 @@
 
 
 volatile unsigned int count=0;
-byte shiftbyte;
-
+byte shiftbyte=B11111000;
+byte switchcount;
+byte switchstatus;
 unsigned long Ctime;
 
 
@@ -19,6 +20,10 @@ void setup()
 	DDRB |= (1 << 3); //portB3 as output
 	DDRB |= (1 << 1);
 	DDRB |= (1 << 2);
+	DDRB &= ~(1 << 4); //port b4 input
+	PORTB |= (1 << 4); //pull-up  to pb4 (pin3)
+
+
 	//pinMode(0, OUTPUT);
 	TCCR1 |= B00000110; //interrupt ~1ms
 	//TCCR1 |= (1 << CS10);
@@ -27,18 +32,47 @@ void setup()
 }
 
 ISR(TIMER1_OVF_vect) {
-
-
-
-//		dataout();
-
-
+	boolean status;
+		dataout();
 	SHIFT();
+	//now check switches?
+	status = bitRead(PINB, 4);	
+	if ( status != bitRead(switchstatus, switchcount)) {
+
+		if (status == false) { //switch pushed
+			switchstatus &= ~(1 << switchcount);
+
+			//payload...
+			shiftbyte ^=(1 << switchcount+5);
+		}
+		else { //switch released
+			switchstatus |= (1 << switchcount);
+		}
+	}
+	else { //dus geen verandering en status is false dus knop ingedrukt, hier de knopvasthoud programmering realiseren.
+
+	}
 }
 
 void dataout() {
-	shiftbyte = shiftbyte << 1;
-	if (shiftbyte == 0) shiftbyte = 1;
+	switchcount++;
+	if (switchcount > 2)switchcount = 0;
+	byte temp = shiftbyte;
+
+	switch (switchcount) {
+	case 0:
+		temp = 6; //00000110
+		break;
+	case 1:
+		temp = 5; //000000101
+		break;
+	case 2:
+		temp = 3; //000000011
+		break;
+	}
+	shiftbyte = shiftbyte >> 3;
+	shiftbyte = shiftbyte << 3;
+	shiftbyte = shiftbyte + temp;
 }
 
 void SHIFT() {
@@ -48,9 +82,9 @@ void SHIFT() {
 	SRCLK (shift command) attiny pin 7, PB2 > pin 11
 	RCLK (latch command) attiny pin 2, PB3 > pin 12
 
-	bit 0-4
-	bit 5-7 via 3 schakelaars terugleiden naar portB4 deze als input, na shift port b4 lezen overeenkomend met welke uitgang
-	van de shiftregister dan laag is. Twee schakelaars drukknoppen dus....
+	bit 3-7
+	bit 0-2 via 3 schakelaars terugleiden naar portB4 deze als input, na shift port b4 lezen overeenkomend met welke uitgang
+	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
 
 
 	*/
@@ -73,7 +107,7 @@ void loop() {
 	/*
 	test om verstreken tijd naar werkelijke tijd te bepalen
 
-*/
+
 	
 
 	if (millis() - Ctime > 1000) {
@@ -81,6 +115,6 @@ void loop() {
 		dataout();
 	}
 
-
+*/
 
 }
