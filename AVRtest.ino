@@ -5,7 +5,7 @@
 */
 
 
-
+byte COM_reg;
 
 
 volatile unsigned int count=0;
@@ -13,6 +13,7 @@ byte shiftbyte=B11111000;
 byte switchcount;
 byte switchstatus;
 unsigned long Ctime;
+byte stepfase;
 
 
 void setup()
@@ -44,6 +45,7 @@ ISR(TIMER1_OVF_vect) {
 
 			//payload...
 			shiftbyte ^=(1 << switchcount+5);
+			//if(switchcount==0) COM_reg ^= (1 << 0);
 		}
 		else { //switch released
 			switchstatus |= (1 << switchcount);
@@ -53,6 +55,31 @@ ISR(TIMER1_OVF_vect) {
 
 	}
 }
+
+void STEP() {
+	byte temp;
+	switch(stepfase) {
+	case 0:
+		temp = B10010000;
+		break;
+	case 1:
+		temp = B01100000;
+		break;
+	case 2:
+		temp = B01100000;
+		break;
+	case 3:
+		temp = B10010000;
+		break;
+	}
+	stepfase++;
+	if (stepfase > 3)stepfase = 0;
+
+	shiftbyte = shiftbyte << 5;
+	shiftbyte = shiftbyte >> 5; //clear bits 4~7
+	shiftbyte = shiftbyte + temp;
+}
+
 
 void dataout() {
 	switchcount++;
@@ -106,15 +133,17 @@ void Shift1() {
 void loop() {
 	/*
 	test om verstreken tijd naar werkelijke tijd te bepalen
-
+*/
 
 	
 
-	if (millis() - Ctime > 1000) {
+	if (millis() - Ctime > 1) {
 		Ctime = millis();
-		dataout();
+		//dataout();
+		//STEP();
+
 	}
 
-*/
+
 
 }
