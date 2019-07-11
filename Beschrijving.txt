@@ -14,3 +14,4 @@ Input op 165 piso shiftregister maken.
 COM_reg
 bit0 direction stepper default false=linksom, true = rechtsom
 bit1 stepper run, true, stop false
+

@@ -36,6 +36,7 @@ unsigned long Ctime;
 byte stepfase;
 byte teller;
 byte shiftcount;
+signed long Currentposition; //ook negatieve getallen mogelijk????
 
 
 
@@ -67,6 +68,20 @@ void setup()
 	//EIMSK |= (1 << INT0);//bitSet(EIMSK, INT0);//EIMSK – External Interrupt Mask Register bit0 INT0 > 1
 	GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
 
+
+	//start
+	stepinit();
+
+}
+
+void stepinit() {
+	//routine die de stepper altijd eerst de beginstand laat zoeken, niet in continue mode?
+
+//richting en snelheid terug lezen uit EEPROM in setup, en nog veel meer natuurlijk
+	//tijdelijk ff zo
+	COM_reg |= (1 << 0);
+	//start stepper
+	COM_reg |= (1 << 1);
 }
 
 /*
@@ -325,16 +340,8 @@ void APP_exe(boolean type, int adres, int decoder, int channel, boolean port, bo
 	}
 }
 
-
-/*
-ISR(TIMER1_OVF_vect) {
-
-	SHIFT();
-
-}
-*/
 void steps() {
-	byte temp;
+	//volgorde spoelen is om en om
 	switch (stepfase) {
 	case 0: //0010
 		shiftbyte |= (2 << 4);
@@ -436,7 +443,11 @@ void switches() {
 				shiftbyte &= ~(15 << 4);
 				COM_reg ^= (1 << 1);
 				break;
-			case 2:
+			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop			
+				shiftbyte &= ~(15 << 4);
+				COM_reg &= ~(1 << 1); //stop stepper
+				Currentposition = 0;
+				
 				break;
 			}
 		}
