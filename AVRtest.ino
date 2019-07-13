@@ -7,8 +7,11 @@
 	om dekoder te laten werken moet attiny op 16Mhz internal clock, branden met arduino IDE? VS schijnt dat niet te doen...
 */
 
+#include <EEPROM.h>
+
 
 //Declaraties Dekoder attiny85 begin ********
+
 volatile unsigned long DEK_Tperiode; //laatst gemeten tijd 
 volatile unsigned int DEK_duur; //gemeten duur van periode tussen twee interupts
 boolean DEK_Monitor = false; //shows DCC commands as bytes
@@ -26,8 +29,9 @@ byte DEK_Buf4[12];
 byte DEK_Buf5[12];
 //end dekoder declarations**********************************
 
-
+byte func; //0=wisselaandrijving, 1= continue, 2= multi postie
 byte COM_reg;
+byte MEM_reg; //register in eeprom
 volatile unsigned int count = 0;
 byte shiftbyte;
 byte switchcount;
@@ -37,7 +41,7 @@ byte stepfase;
 byte teller;
 byte shiftcount;
 signed long Currentposition; //ook negatieve getallen mogelijk????
-
+signed long Targetposition;
 
 
 void setup()
@@ -70,21 +74,26 @@ void setup()
 
 
 	//start
+	MEM_read();
 	stepinit();
 
 }
 
-void stepinit() {
-	//routine die de stepper altijd eerst de beginstand laat zoeken, niet in continue mode?
+void MEM_read() {
+	MEM_reg = EEPROM.read(0);
+}
 
-//richting en snelheid terug lezen uit EEPROM in setup, en nog veel meer natuurlijk
-	//tijdelijk ff zo
-	COM_reg |= (1 << 0);
+void stepinit() {
+
+	COM_reg &= ~(1 << 0);
+	//if (bitRead(MEM_reg, 0) == true) COM_reg |= (1 << 0); // start direction
+
+	COM_reg |= (1 << 2); //set flag init direction of stepper
 	//start stepper
 	COM_reg |= (1 << 1);
 }
 
-/*
+
 void debug(byte type) {
 
 	switch (type) {
@@ -93,12 +102,12 @@ void debug(byte type) {
 		if (teller == 0) shiftbyte ^= (1 << 3);
 		break;
 	case 1: //toggle led 4
-		shiftbyte ^= (1 << 4);
+		shiftbyte ^= (1 << 3);
 		break;
 	}
 
 }
-*/
+
 
 //deKoder Attiny85 begin ********************************************************
 ISR(PCINT0_vect) { //syntax voor een ISR
@@ -341,49 +350,55 @@ void APP_exe(boolean type, int adres, int decoder, int channel, boolean port, bo
 }
 
 void steps() {
-	//volgorde spoelen is om en om
-	switch (stepfase) {
+	//volgorde spoelen kan wisselen
+	byte step;
+	step = stepfase;
+	if (bitRead(MEM_reg, 0) == true)step = 7 - step;
+	shiftbyte &= ~(15 << 4);
+	switch (step) {
 	case 0: //0010
 		shiftbyte |= (2 << 4);
-		shiftbyte &= ~(13 << 4);
 		break;
 	case 1: //0011
 		shiftbyte |= (3 << 4);
-		shiftbyte &= ~(12 << 4);
 		break;
 	case 2: //0001
 		shiftbyte |= (1 << 4);
-		shiftbyte &= ~(14 << 4);
 		break;
 	case 3: //1001
 		shiftbyte |= (9 << 4);
-		shiftbyte &= ~(6 << 4);
 		break;
 	case 4: //1000
 		shiftbyte |= (8 << 4);
-		shiftbyte &= ~(7 << 4);
+		//shiftbyte &= ~(7 << 4);
 		break;
 	case 5: //1100
 		shiftbyte |= (12 << 4);
-		shiftbyte &= ~(3 << 4);
 		break;
 	case 6: //0100
 		shiftbyte |= (4 << 4);
-		shiftbyte &= ~(11 << 4);		
 		break;
 	case 7: //0110
 		shiftbyte |= (6 << 4);
-		shiftbyte &= ~(9 << 4);
 		break;
 	}
+
 	if (bitRead(COM_reg, 0) == true) {
+		Currentposition++;
 		stepfase++;
 		if (stepfase > 7)stepfase = 0;
 	}
 	else {
+		Currentposition--;
 		stepfase--;
 		if (stepfase > 7)stepfase = 7;
 	}
+	if (Currentposition == Targetposition) stopstep();
+}
+void stopstep() {
+	shiftbyte &= ~(15 << 4);
+	COM_reg &= ~(1 << 1);
+	COM_reg &= ~(1 << 4);
 }
 void switchset() { //shifts the switch puls
 	switchcount++;
@@ -437,17 +452,42 @@ void switches() {
 
 			switch (switchcount) {
 			case 0:
-				COM_reg ^= (1 << 0); //direction change
+				//COM_reg ^= (1 << 0); //direction change only in  special button mode
+
+				//func
+				switch (func) {
+				case 0: //wisselaandrijving twee posities, 1e positie in 0
+					if (bitRead(COM_reg, 4) == false) {
+						COM_reg &= ~(1 << 0);
+						COM_reg |= (1 << 1); //start stepper
+					}
+					break;
+				}
+
+				if (bitRead(COM_reg, 2) == true) {
+					COM_reg |= (1 << 3); //set flag direction changed in startup
+					COM_reg ^= (1 << 0); //temp change direction
+				}
 				break;
 			case 1:
-				shiftbyte &= ~(15 << 4);
-				COM_reg ^= (1 << 1);
+				COM_reg |= (1 << 0); //direction counter clockwise left
+				COM_reg |= (1 << 1); //start stepper 
+				Targetposition = 600;
 				break;
-			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop			
+			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
+				debug(1);
 				shiftbyte &= ~(15 << 4);
-				COM_reg &= ~(1 << 1); //stop stepper
+				COM_reg &= ~(1 << 1);
+
+				if (bitRead(COM_reg, 3) == true) { //direction changed during startup, wrong start direction correction					
+					//debug(1);
+					MEM_reg ^= (1 << 0);
+					EEPROM.update(0, MEM_reg);
+				}
+				COM_reg &= ~(0b00001100); //reset flags
 				Currentposition = 0;
-				
+
+				COM_reg |= (1 << 4); //stepper in 0 position
 				break;
 			}
 		}
@@ -476,6 +516,6 @@ void loop() {
 	if (millis() - Ctime > 1) {
 		Ctime = millis();
 		//dataout();
-		if (bitRead(COM_reg,1)==true) steps();
+		if (bitRead(COM_reg, 1) == true) steps();
 	}
 }

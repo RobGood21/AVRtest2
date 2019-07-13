@@ -1,17 +1,21 @@
 programmeren attiny85
 via arduino arduino as ISP (in system programmer)
-Eerst de arduino schetch uit voorbeeld ISP programmeren.
+Eerst de arduino schetch uit voorbeeld ISP programmeren in de arduino uno die als programmer wordt gebruikt.
 Daarna board op attiny en in vmicro uploader programmer arduino as ISP kiezen
-onduidelijk:
-functie boorloader, of hiermee alleen enkele fuses aanpassen in de attiny?
-elco tussen reset en gnd
+bootloader laden zet alleen de click, pas op nooit externe clock kiezen, dat is einde attiny, zet op 16Mhz voor project single WA
+Uploaden bootloader nog niet gelukt vanuit VS wel vanuit Arduino.IDE
+elco tussen reset en gnd, geen idee waarom.... 
 C code geeft fout aanduidingen maar worden wel gecompileerd
-Interupt vect getest werkt.
-timer 1 op ongeveer 1ms (denk ik) volgens berekening. Output naar shiftregister
-Input op 165 piso shiftregister maken. 
+
 
 
 COM_reg
-bit0 direction stepper default false=linksom, true = rechtsom
+bit0 direction stepper false=rechtsom naar switch, true = linksom
 bit1 stepper run, true, stop false
-
+bit2 flag init direction
+bit3 flag, direction changed in startup
+bit4 flag, stepper in 0 position true
+  
+MEM_reg   EEPROM adres #0
+bit0 //direction start
+bit1
