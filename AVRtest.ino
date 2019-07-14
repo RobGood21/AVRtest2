@@ -8,10 +8,7 @@
 */
 
 #include <EEPROM.h>
-
-
 //Declaraties Dekoder attiny85 begin ********
-
 volatile unsigned long DEK_Tperiode; //laatst gemeten tijd 
 volatile unsigned int DEK_duur; //gemeten duur van periode tussen twee interupts
 boolean DEK_Monitor = false; //shows DCC commands as bytes
@@ -34,12 +31,16 @@ byte COM_reg;
 byte MEM_reg; //register in eeprom
 volatile unsigned int count = 0;
 byte shiftbyte;
+byte shiftled;//bit0~2
 byte switchcount;
 byte switchstatus;
 unsigned long Ctime;
+unsigned long Stime;
+
 byte stepfase;
 byte teller;
 byte shiftcount;
+byte counter[2];
 signed long Currentposition; //ook negatieve getallen mogelijk????
 signed long Targetposition;
 
@@ -55,6 +56,8 @@ void setup()
 	DDRB &= ~(1 << 4); //port b4 input
 	DDRB &= ~(1 << 0); //port b0 input
 	PORTB |= (1 << 4); //pull-up  to pb4 (pin3)
+
+
 
 
 	//pinMode(0, OUTPUT);
@@ -77,10 +80,14 @@ void setup()
 	MEM_read();
 	stepinit();
 
+
+
 }
 
 void MEM_read() {
 	MEM_reg = EEPROM.read(0);
+	//tijdelijk ff vast waarde
+	Targetposition = 600;
 }
 
 void stepinit() {
@@ -353,7 +360,8 @@ void steps() {
 	//volgorde spoelen kan wisselen
 	byte step;
 	step = stepfase;
-	if (bitRead(MEM_reg, 0) == true)step = 7 - step;
+	//if (bitRead(MEM_reg, 0) == true)
+	step = 7 - step;
 	shiftbyte &= ~(15 << 4);
 	switch (step) {
 	case 0: //0010
@@ -400,21 +408,23 @@ void stopstep() {
 	COM_reg &= ~(1 << 1);
 	COM_reg &= ~(1 << 4);
 }
-void switchset() { //shifts the switch puls
+void ledset() { //sets the leds to be shifted out
+	shiftbyte &= ~(7 << 0); //clear bit 0~2
+	shiftbyte |= (shiftled << 0);
+}
+void switchset() { //sets the switch pulses to be shifted
 	switchcount++;
 	if (switchcount > 2)switchcount = 0;
+	shiftbyte &= ~(7 << 0); //clear bit 0~2
 	switch (switchcount) {
 	case 0:
 		shiftbyte |= (6 << 0);
-		shiftbyte &= ~(1 << 0);
 		break;
 	case 1:
 		shiftbyte |= (5 << 0);
-		shiftbyte &= ~(2 << 0);
 		break;
 	case 2:
 		shiftbyte |= (3 << 0);
-		shiftbyte &= ~(4 << 0);
 		break;
 	}
 }
@@ -432,15 +442,25 @@ void SHIFT() {
 
 	*/
 
-	//eerst
-	switchset();
+	//read switches
+	counter[0]--;
+	if (counter[0] > 100) {
+		counter[0] = 10;
+		switchset();
+		Shift1();
+		//latch shift register
+		PINB |= (1 << 3);
+		PINB |= (1 << 3);
+		switches();
+		ledset();
+	}
+	
 	Shift1();
 	//latch shift register
 	PINB |= (1 << 3);
 	PINB |= (1 << 3);
-
-	switches();
 }
+
 void switches() {
 	boolean status;
 	status = bitRead(PINB, 4);
@@ -448,34 +468,27 @@ void switches() {
 
 		if (status == false) { //switch pushed
 			switchstatus &= ~(1 << switchcount);
-			//shiftbyte ^= (1 << switchcount + 5);
 
 			switch (switchcount) {
-			case 0:
-				//COM_reg ^= (1 << 0); //direction change only in  special button mode
+			case 0: //primaire switch op pcb
+				COM_reg ^= (1 << 0); //direction change
+				COM_reg |= (1 << 1); //start stepper
 
-				//func
-				switch (func) {
-				case 0: //wisselaandrijving twee posities, 1e positie in 0
-					if (bitRead(COM_reg, 4) == false) {
-						COM_reg &= ~(1 << 0);
-						COM_reg |= (1 << 1); //start stepper
-					}
-					break;
-				}
+				//if (bitRead(COM_reg, 4) == false) {
+				//	COM_reg &= ~(1 << 0);
+				//}
 
 				if (bitRead(COM_reg, 2) == true) {
 					COM_reg |= (1 << 3); //set flag direction changed in startup
-					COM_reg ^= (1 << 0); //temp change direction
 				}
 				break;
-			case 1:
+
+			case 1: //secundaire switch alleen extern aan te sluiten
 				COM_reg |= (1 << 0); //direction counter clockwise left
-				COM_reg |= (1 << 1); //start stepper 
-				Targetposition = 600;
+				if (bitRead(COM_reg, 4) == true)COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				break;
 			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
-				debug(1);
+				//debug(1);
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
 
@@ -486,7 +499,6 @@ void switches() {
 				}
 				COM_reg &= ~(0b00001100); //reset flags
 				Currentposition = 0;
-
 				COM_reg |= (1 << 4); //stepper in 0 position
 				break;
 			}
@@ -499,6 +511,9 @@ void switches() {
 	else { //dus geen verandering en status is false dus knop ingedrukt, hier de knopvasthoud programmering realiseren.
 	}
 }
+void setTarget() {
+	Targetposition = 600;
+}
 void Shift1() {
 	//shift 1e byte
 	for (byte i = 0; i < 8; i++) {
@@ -508,14 +523,30 @@ void Shift1() {
 		PINB |= (1 << 2);
 	}
 }
+void slowevents() {
+	SHIFT();
+	
+	
+	if (millis() - Stime > 1000) {
+		Stime = millis();
+		shiftled++;
+		if (shiftled > 7)shiftled = 0;
+	}
+
+}
 
 void loop() {
 	shiftcount++;
 	DEK_DCCh();
-	if (shiftcount == 0) SHIFT();
+	if (shiftcount == 0) slowevents();
+
+	
 	if (millis() - Ctime > 1) {
 		Ctime = millis();
 		//dataout();
 		if (bitRead(COM_reg, 1) == true) steps();
 	}
+
+
+
 }

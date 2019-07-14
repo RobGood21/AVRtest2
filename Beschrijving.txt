@@ -18,4 +18,4 @@ bit4 flag, stepper in 0 position true
   
 MEM_reg   EEPROM adres #0
 bit0 //direction start
-bit1
+bit1 //bediening single true, duo false
