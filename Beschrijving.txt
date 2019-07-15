@@ -15,7 +15,17 @@ bit1 stepper run, true, stop false
 bit2 flag init direction
 bit3 flag, direction changed in startup
 bit4 flag, stepper in 0 position true
+bit5 flag, knop inS programmeer knop vastgehouden ingedrukt
+bit6 flag program mode true
   
 MEM_reg   EEPROM adres #0
 bit0 //direction start
 bit1 //bediening single true, duo false
+
+
+counter[s]
+0 vaste functie in void SHIFT
+1 vaste timer blink
+2 timer blink 
+3 timer blink
+4 vaste timer switches

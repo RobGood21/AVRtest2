@@ -40,7 +40,9 @@ unsigned long Stime;
 byte stepfase;
 byte teller;
 byte shiftcount;
-byte counter[2];
+byte counter[6]; //diverse tellers
+byte prgmode;
+byte ledmode;
 signed long Currentposition; //ook negatieve getallen mogelijk????
 signed long Targetposition;
 
@@ -79,7 +81,7 @@ void setup()
 	//start
 	MEM_read();
 	stepinit();
-
+	switchstatus = 7;
 
 
 }
@@ -93,13 +95,15 @@ void MEM_read() {
 void stepinit() {
 
 	COM_reg &= ~(1 << 0);
-	//if (bitRead(MEM_reg, 0) == true) COM_reg |= (1 << 0); // start direction
-
 	COM_reg |= (1 << 2); //set flag init direction of stepper
 	//start stepper
 	COM_reg |= (1 << 1);
 }
 
+void switchinit() {
+	//check status positie schakelaar
+
+}
 
 void debug(byte type) {
 
@@ -439,13 +443,9 @@ void SHIFT() {
 	bit 3-7
 	bit 0-2 via 3 schakelaars terugleiden naar portB4 deze als input, na shift port b4 lezen overeenkomend met welke uitgang
 	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
-
 	*/
-
-	//read switches
-	counter[0]--;
-	if (counter[0] > 100) {
-		counter[0] = 10;
+	//read switches	
+	if (counter[0] == 0) {
 		switchset();
 		Shift1();
 		//latch shift register
@@ -454,7 +454,9 @@ void SHIFT() {
 		switches();
 		ledset();
 	}
-	
+	counter[0] ++;
+	if (counter[0] > 20)counter[0] = 0;
+
 	Shift1();
 	//latch shift register
 	PINB |= (1 << 3);
@@ -467,19 +469,20 @@ void switches() {
 	if (status != bitRead(switchstatus, switchcount)) {
 
 		if (status == false) { //switch pushed
-			switchstatus &= ~(1 << switchcount);
+			switchstatus &= ~(1 << switchcount); //klopt eigenlijk niet 
 
 			switch (switchcount) {
 			case 0: //primaire switch op pcb
-				COM_reg ^= (1 << 0); //direction change
-				COM_reg |= (1 << 1); //start stepper
+				COM_reg |= (1 << 5);
+				counter[5] = 0;
 
-				//if (bitRead(COM_reg, 4) == false) {
-				//	COM_reg &= ~(1 << 0);
-				//}
-
-				if (bitRead(COM_reg, 2) == true) {
-					COM_reg |= (1 << 3); //set flag direction changed in startup
+				switch (prgmode) {
+				case 0:
+					COM_reg ^= (1 << 0); //direction change
+					COM_reg |= (1 << 1); //start stepper
+					break;
+				case 1: //change startup direction
+					break;
 				}
 				break;
 
@@ -488,29 +491,58 @@ void switches() {
 				if (bitRead(COM_reg, 4) == true)COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				break;
 			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
-				//debug(1);
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
-
-				if (bitRead(COM_reg, 3) == true) { //direction changed during startup, wrong start direction correction					
-					//debug(1);
-					MEM_reg ^= (1 << 0);
-					EEPROM.update(0, MEM_reg);
-				}
-				COM_reg &= ~(0b00001100); //reset flags
 				Currentposition = 0;
 				COM_reg |= (1 << 4); //stepper in 0 position
 				break;
 			}
 		}
 		else { //switch released
-			//shiftbyte &= ~(1 << switchcount +5);
-			switchstatus |= (1 << switchcount);
+			switchstatus |= (1 << switchcount); //klopt niet eigenlijk
+
+			switch (switchcount) {
+			case 0: //inS
+				if (prgmode > 0) {
+				debug(1);
+				COM_reg &= ~(1 << 5);
+				counter[5] = 0;
+				COM_reg |= (1 << 6); //flag for ending program mode
+				}
+
+				
+				break;
+			case 1: //exS
+				break;
+			case 2: //position switch
+				break;
+			}
 		}
 	}
-	else { //dus geen verandering en status is false dus knop ingedrukt, hier de knopvasthoud programmering realiseren.
+	else { //dus geen verandering en status is false dus knop ingedrukt gehouden
+		if (status == false & switchcount == 0) {
+			if (counter[5] == 30) {
+				if (bitRead(COM_reg, 6) == true) { //stop program mode
+					prgmode = 0;
+					ledmode = 20;
+					counter[2] = 0;
+					counter[5] = 0;
+					COM_reg &= ~(1 << 6); 
+				}
+				else {
+					prgmode = 1;
+					ledmode = 1;
+				}
+			}
+			if (counter[5] == 60) {
+				//tweede program mode en zo verder
+			}
+		}
+
 	}
 }
+
+
 void setTarget() {
 	Targetposition = 600;
 }
@@ -524,23 +556,54 @@ void Shift1() {
 	}
 }
 void slowevents() {
-	SHIFT();
-	
-	
-	if (millis() - Stime > 1000) {
-		Stime = millis();
-		shiftled++;
-		if (shiftled > 7)shiftled = 0;
+
+
+	counter[1]++;
+	if (counter[1] == 100) {
+		counter[1] = 0;
+		blink();
 	}
 
+	SHIFT();
 }
 
+void blink() {
+
+	if (bitRead(COM_reg, 5) == true) {
+		//debug(1);
+		counter[5]++;
+	}
+
+	switch (ledmode) {
+	case 0:
+
+		break;
+	case 1: //program fase 1
+		counter[2]++;
+		if (counter[2] == 1)shiftled |= (1 << 0);
+		if (counter[2] == 2)shiftled &= ~(1 << 0);
+		if (counter[2] > 8)counter[2] = 0;
+		break;
+	case 20:
+		counter[2]++;
+		if (counter[2] == 2)shiftled |= (3 << 0);
+		if (counter[2] == 20) {
+			shiftled &= ~(7 << 0);
+			counter[2] == 0;
+			ledmode = 0;
+		}
+		break;
+
+
+
+	}
+}
 void loop() {
 	shiftcount++;
 	DEK_DCCh();
 	if (shiftcount == 0) slowevents();
 
-	
+
 	if (millis() - Ctime > 1) {
 		Ctime = millis();
 		//dataout();
