@@ -57,16 +57,8 @@ void setup()
 
 	DDRB &= ~(1 << 4); //port b4 input
 	DDRB &= ~(1 << 0); //port b0 input
-	PORTB |= (1 << 4); //pull-up  to pb4 (pin3)
+	PORTB |= (1 << 4); //pull-up  to pb4 (pin3)   	 
 
-
-
-
-	//pinMode(0, OUTPUT);
-	//TCCR1 |= B00000110; //interrupt ~1ms
-	//TCCR1 |= (1 << CS10); niet
-	//TCCR1 |= (1 << CS12); niet
-	//TIMSK |= (1 << 2);
 
 	//DeKoder Attiny85 part, interrupt on PIN5 (PB0)
 	PCMSK |= (1 << 0); //pin change mask register bit 0 = PB0
@@ -77,13 +69,10 @@ void setup()
 	//EIMSK |= (1 << INT0);//bitSet(EIMSK, INT0);//EIMSK – External Interrupt Mask Register bit0 INT0 > 1
 	GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
 
-
 	//start
 	MEM_read();
 	stepinit();
 	switchstatus = 7;
-
-
 }
 
 void MEM_read() {
@@ -94,10 +83,10 @@ void MEM_read() {
 
 void stepinit() {
 
-	COM_reg &= ~(1 << 0);
-	COM_reg |= (1 << 2); //set flag init direction of stepper
-	//start stepper
-	COM_reg |= (1 << 1);
+	//COM_reg &= ~(1 << 0);
+	//COM_reg |= (1 << 1);
+	COM_reg |= (1 << 2);//set flag for startup position 
+	//leddir();
 }
 
 void switchinit() {
@@ -105,6 +94,11 @@ void switchinit() {
 
 }
 
+void leddir() {
+	shiftbyte &= ~(1 << 3);
+	if (bitRead(COM_reg, 0) == false) shiftbyte |= (1 << 3);
+
+}
 void debug(byte type) {
 
 	switch (type) {
@@ -420,6 +414,7 @@ void switchset() { //sets the switch pulses to be shifted
 	switchcount++;
 	if (switchcount > 2)switchcount = 0;
 	shiftbyte &= ~(7 << 0); //clear bit 0~2
+	//shiftbyte = 0;
 	switch (switchcount) {
 	case 0:
 		shiftbyte |= (6 << 0);
@@ -445,7 +440,7 @@ void SHIFT() {
 	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
 	*/
 	//read switches	
-	if (counter[0] == 0) {
+	if (counter[0] == 20) {
 		switchset();
 		Shift1();
 		//latch shift register
@@ -478,7 +473,13 @@ void switches() {
 
 				switch (prgmode) {
 				case 0:
-					COM_reg ^= (1 << 0); //direction change
+					//if (bitRead(COM_reg, 4) == true) {
+					//	COM_reg |= (1 << 0);
+					//}
+					//else {
+					//	COM_reg &= ~(1 << 0);
+					//}			
+					COM_reg ^= (1 << 0);
 					COM_reg |= (1 << 1); //start stepper
 					break;
 				case 1: //change startup direction
@@ -491,7 +492,8 @@ void switches() {
 				if (bitRead(COM_reg, 4) == true)COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				break;
 			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
-				shiftbyte &= ~(15 << 4);
+				//shiftbyte &= ~(15 << 4);
+				shiftbyte = 0;
 				COM_reg &= ~(1 << 1);
 				Currentposition = 0;
 				COM_reg |= (1 << 4); //stepper in 0 position
@@ -504,13 +506,19 @@ void switches() {
 			switch (switchcount) {
 			case 0: //inS
 				if (prgmode > 0) {
-				debug(1);
-				COM_reg &= ~(1 << 5);
-				counter[5] = 0;
-				COM_reg |= (1 << 6); //flag for ending program mode
+					//debug(1);
+					COM_reg &= ~(1 << 5);
+					counter[5] = 0;
+					COM_reg |= (1 << 6); //flag for ending program mode
 				}
+				switch (prgmode) {
+				case 1:
 
-				
+					break;
+				case 2:
+
+					break;
+				}
 				break;
 			case 1: //exS
 				break;
@@ -521,27 +529,40 @@ void switches() {
 	}
 	else { //dus geen verandering en status is false dus knop ingedrukt gehouden
 		if (status == false & switchcount == 0) {
-			if (counter[5] == 30) {
+			if (counter[5] == 40 +(prgmode*2)) { //40 =periode van vasthouden tussen programma fases, duurt langer in hogere fases
+
 				if (bitRead(COM_reg, 6) == true) { //stop program mode
 					prgmode = 0;
 					ledmode = 20;
 					counter[2] = 0;
 					counter[5] = 0;
-					COM_reg &= ~(1 << 6); 
+					COM_reg &= ~(1 << 6);
 				}
 				else {
-					prgmode = 1;
+					prgmode ++;
 					ledmode = 1;
+					counter[5] = 0;
+					if (prgmode > 8)COM_reg &= ~(1 < 6); //next cycle stops program mode
+					//clearcounters();
 				}
 			}
-			if (counter[5] == 60) {
+			/*
+			
+			if (counter[5] == 60) { //progmode 2
+				prgmode = 2;
+				ledmode = 1;
+				//clearcounters();
 				//tweede program mode en zo verder
-			}
+			}*/
 		}
-
 	}
+	leddir();
 }
-
+void clearcounters() { //WORDT NIET GEBRUIKT????
+	counter[1] = 0;
+	counter[2] = 0;
+	counter[3] = 0;
+}
 
 void setTarget() {
 	Targetposition = 600;
@@ -558,17 +579,32 @@ void Shift1() {
 void slowevents() {
 
 
+
+
 	counter[1]++;
 	if (counter[1] == 100) {
 		counter[1] = 0;
 		blink();
+
+		if (bitRead(COM_reg, 2) == true) {
+			counter[4]++;
+			if (counter[4] > 20) {
+				counter[4] = 0;
+				//geprogrammeerde opstartrichting opzoeken en instellen 
+				//COM_reg |= (1 << 0);
+				COM_reg &= ~(1 << 0);
+				//starten
+				COM_reg |= (1 << 1);
+				COM_reg &= ~(1 << 2);
+				leddir();
+			}
+		}
 	}
 
 	SHIFT();
 }
 
 void blink() {
-
 	if (bitRead(COM_reg, 5) == true) {
 		//debug(1);
 		counter[5]++;
@@ -576,14 +612,29 @@ void blink() {
 
 	switch (ledmode) {
 	case 0:
-
 		break;
+
 	case 1: //program fase 1
 		counter[2]++;
-		if (counter[2] == 1)shiftled |= (1 << 0);
-		if (counter[2] == 2)shiftled &= ~(1 << 0);
-		if (counter[2] > 8)counter[2] = 0;
+		if (counter[2] == 3)shiftled |= (1 << 0);
+
+		if (counter[2] == 4) {
+			shiftled &= ~(1 << 0);
+			counter[3]++;
+
+			if (counter[3] >= prgmode) {
+				counter[2] = 10;
+				counter[3] = 0;
+			}
+			else {
+				counter[2] = 0;
+			}
+		}
+		if (counter[2] > 20)counter[2] = 0;
 		break;
+
+
+
 	case 20:
 		counter[2]++;
 		if (counter[2] == 2)shiftled |= (3 << 0);
@@ -593,9 +644,6 @@ void blink() {
 			ledmode = 0;
 		}
 		break;
-
-
-
 	}
 }
 void loop() {
@@ -609,7 +657,4 @@ void loop() {
 		//dataout();
 		if (bitRead(COM_reg, 1) == true) steps();
 	}
-
-
-
 }
