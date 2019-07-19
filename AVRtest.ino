@@ -77,8 +77,10 @@ void setup()
 
 void MEM_read() {
 	MEM_reg = EEPROM.read(0);
-	//tijdelijk ff vast waarde
 	Targetposition = 600;
+}
+void MEM_change() {
+	EEPROM.update(0, MEM_reg);
 }
 
 void stepinit() {
@@ -358,8 +360,7 @@ void steps() {
 	//volgorde spoelen kan wisselen
 	byte step;
 	step = stepfase;
-	//if (bitRead(MEM_reg, 0) == true)
-	step = 7 - step;
+	if (bitRead(MEM_reg, 0) == true) step = 7 - step;
 	shiftbyte &= ~(15 << 4);
 	switch (step) {
 	case 0: //0010
@@ -472,17 +473,12 @@ void switches() {
 				counter[5] = 0;
 
 				switch (prgmode) {
-				case 0:
-					//if (bitRead(COM_reg, 4) == true) {
-					//	COM_reg |= (1 << 0);
-					//}
-					//else {
-					//	COM_reg &= ~(1 << 0);
-					//}			
+				case 0:		
 					COM_reg ^= (1 << 0);
 					COM_reg |= (1 << 1); //start stepper
 					break;
-				case 1: //change startup direction
+				case 1: //change startup direction, dit kan straks voor alle prgmodes??
+					COM_reg |= (1 << 3);
 					break;
 				}
 				break;
@@ -512,8 +508,14 @@ void switches() {
 					COM_reg |= (1 << 6); //flag for ending program mode
 				}
 				switch (prgmode) {
-				case 1:
-
+				case 1: //direction in start
+					if (bitRead(COM_reg, 3) == true) {
+						MEM_reg ^= (1 << 0); 
+						shiftled ^= (1 << 1);
+					}
+					else {
+						if (bitRead(MEM_reg, 0) == true)shiftled |= (1 << 1);
+					}
 					break;
 				case 2:
 
@@ -537,6 +539,7 @@ void switches() {
 					counter[2] = 0;
 					counter[5] = 0;
 					COM_reg &= ~(1 << 6);
+					MEM_change(); //store changes in EEPROM
 				}
 				else {
 					prgmode ++;
@@ -546,14 +549,6 @@ void switches() {
 					//clearcounters();
 				}
 			}
-			/*
-			
-			if (counter[5] == 60) { //progmode 2
-				prgmode = 2;
-				ledmode = 1;
-				//clearcounters();
-				//tweede program mode en zo verder
-			}*/
 		}
 	}
 	leddir();
