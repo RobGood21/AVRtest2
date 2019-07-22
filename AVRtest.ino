@@ -41,6 +41,7 @@ byte stepcount; //ff int
 
 byte stepfase;
 byte speed; //ff int
+byte speedcount;
 
 byte teller;
 byte slowcount;
@@ -50,9 +51,6 @@ byte prgfase; //fase van programmaverloop
 byte ledmode;
 int Currentposition; //ook negatieve getallen mogelijk????
 int Targetposition;
-
-
-
 void setup()
 {
 	DDRB |= (1 << 3); //portB3 as output
@@ -86,11 +84,11 @@ void MEM_read() {
 
 	speed = EEPROM.read(1);
 	if (speed > 60) {
-		speed = 10;
+		speed = 5;
 		EEPROM.update(1, speed);
 	}
-	/*
 
+	/*
 	EEPROM.get(2, Targetposition); //int 4 bytes
 	if (Targetposition > 650) {
 		Targetposition = 400;
@@ -98,8 +96,8 @@ void MEM_read() {
 	}
 */
 	Targetposition = EEPROM.read(2);
-	if (Targetposition > 35) {
-		Targetposition = 20;
+	if (Targetposition > 70) {
+		Targetposition = 50;
 		EEPROM.update(2, Targetposition);
 	}
 	Targetposition = Targetposition * 10;
@@ -384,7 +382,6 @@ void APP_exe(boolean type, int adres, int decoder, int channel, boolean port, bo
 			shiftbyte &= ~(1 << 3);
 			//PORTB &= ~(1 << 1);
 		}
-
 	}
 }
 
@@ -432,7 +429,7 @@ void steps() {
 		stepfase--;
 		if (stepfase > 7)stepfase = 7;
 	}
-	if (prgmode == 0)if (Currentposition == Targetposition) stopstep();
+	stopstep();
 }
 void step4() {
 	//volgorde spoelen kan wisselen FULL stepper
@@ -443,7 +440,6 @@ void step4() {
 
 	byte step;
 	step = stepfase;
-
 
 	//false stand is voor de all goods steppers...
 	if (bitRead(MEM_reg, 0) == false) step = 3 - step;
@@ -474,14 +470,35 @@ void step4() {
 		stepfase--;
 		if (stepfase > 3)stepfase = 3;
 	}
-	if (prgmode == 0)if (Currentposition == Targetposition) stopstep();
+	stopstep();
 }
 
-
+void speedx() {
+	//10 stappen
+	switch (speedcount) {
+	case 0:
+		break;
+	case 1:
+		break;
+	case 2:
+		break;
+	}
+	speedcount++;
+	if (speedcount > 9)speedcount = 0;
+}
 void stopstep() {
-	shiftbyte &= ~(15 << 4);
-	COM_reg &= ~(1 << 1);
-	COM_reg &= ~(1 << 4);
+	//if (prgmode == 0) {
+	if (Currentposition == Targetposition) {
+		COM_reg &= ~(1 << 4);
+		if (prgmode == 3) {
+			COM_reg &= ~(1 << 0); //direction return
+		}
+		else {
+			shiftbyte &= ~(15 << 4);
+			COM_reg &= ~(1 << 1);
+		}
+	}
+	//}
 }
 void ledset() { //sets the leds to be shifted out
 	shiftbyte &= ~(7 << 0); //clear bit 0~2
@@ -550,7 +567,13 @@ void switches() {
 			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
 				//shiftbyte &= ~(15 << 4);	
 				shiftbyte = 0;
-				COM_reg &= ~(1 << 1);
+				if (prgmode == 3) { //no stop continue heen en weer in prgmode 3 (speed)
+					COM_reg ^= (1 << 0); //toggle direction
+				}
+				else {
+					COM_reg &= ~(1 << 1);
+				}
+
 				Currentposition = 0;
 				COM_reg |= (1 << 4); //stepper in 0 position
 				break;
@@ -560,15 +583,17 @@ void switches() {
 			switchstatus |= (1 << switchcount); //klopt niet eigenlijk, switchcount is decimal, switchstatus binair tot 3 kan dit
 
 			switch (switchcount) {
-			case 0: //inS
+			case 0: //
 				if (prgmode > 0) {
 					//debug(1);
 					COM_reg &= ~(1 << 5);
 					counter[5] = 0;
 					COM_reg |= (1 << 6); //flag for ending program mode
 				}
+
+				//**********************begin progmode
 				switch (prgmode) {
-				case 1: //direction in start
+				case 1: //*****direction in start
 					if (bitRead(COM_reg, 3) == true) {
 						MEM_reg ^= (1 << 0);
 						shiftled ^= (1 << 1);
@@ -578,7 +603,7 @@ void switches() {
 					}
 					break;
 
-				case 2: //uitslag in mode 1 (WA)
+				case 2: //********uitslag in mode 1 (WA)
 					switch (prgfase) {
 					case 0: //start
 						//stepper naar begin stand
@@ -599,12 +624,29 @@ void switches() {
 						break;
 					}
 
-
 					break;
-				case 3:
+				case 3: //*****Speed snelheid
+					//beweeg heem em weer coninue
+					switch (prgfase) {
+					case 0: //begin snelheidsbepaling, stepper continue heen en weer
+						if (bitRead(COM_reg, 4) == false) {
+							COM_reg &= ~(1 << 0); //richting
+						}
+						else {
+							COM_reg |= (1 << 0); //richting
+						}
+						COM_reg |= (1 << 1); //start stepper
+						prgfase++;
+						break;
+					case 1:
+						break;
+					}
+
+
 					break;
 				}
 				break;
+				//****************** end start prg mode
 			case 1: //exS
 				break;
 			case 2: //position switch
@@ -614,7 +656,7 @@ void switches() {
 	}
 	else { //dus geen verandering en status is false dus knop ingedrukt gehouden
 		if (status == false & switchcount == 0) {
-			if (counter[5] > 40 + (prgmode * 2)) { //40 =periode van vasthouden tussen programma fases, duurt langer in hogere fases
+			if (counter[5] > 40 + (prgmode * 5)) { //40 =periode van vasthouden tussen programma fases, duurt langer in hogere fases
 				shiftled &= ~(3 << 0); //kill leds
 				if (bitRead(COM_reg, 6) == true) { //stop program mode
 					prgEnd();
@@ -670,7 +712,7 @@ void Shift1() {
 void slowevents() {
 	//read switches, set leds
 	counter[0] ++;
-	if (counter[0] > 80) {
+	if (counter[0] > 50) {
 		counter[0] = 0;
 		switchset();
 		SHIFT();
@@ -678,8 +720,10 @@ void slowevents() {
 		ledset();
 		SHIFT();
 		//initial start
+
+		counter[4]++;
 		if (bitRead(COM_reg, 2) == true) {
-			counter[4]++;
+
 			if (counter[4] == 20) {
 				counter[4] = 0;
 				COM_reg &= ~(1 << 0);
@@ -690,17 +734,26 @@ void slowevents() {
 				leddir();
 			}
 		}
-		blink();
-		if (bitRead(COM_reg, 5) == true) {
-			//debug(1);
-			counter[5]++;
+		else {
+			if (counter[4] > 1) {
+				counter[4] = 0;
+				blink();
+				if (bitRead(COM_reg, 5) == true) {
+					//debug(1);
+					counter[5]++;
+				}
+
+			}
 		}
+
+
+
 	}
 
 	stepcount++;
 	if (stepcount > speed & bitRead(COM_reg, 1) == true) { //speed 2 = minimum
 		stepcount = 0;
-		step4();
+		steps(); //omschakelbaar maken? van steps4 naar steps????
 		SHIFT();
 	}
 }
@@ -712,21 +765,21 @@ void blink() {
 
 	case 1: //program fase 1
 		counter[2]++;
-		if (counter[2] == 3)shiftled |= (1 << 0);
+		if (counter[2] == 5)shiftled |= (1 << 0);
 
-		if (counter[2] == 4) {
+		if (counter[2] == 7) {
 			shiftled &= ~(1 << 0);
 			counter[3]++;
 
 			if (counter[3] >= prgmode) {
-				counter[2] = 10;
+				counter[2] = 20;
 				counter[3] = 0;
 			}
 			else {
 				counter[2] = 0;
 			}
 		}
-		if (counter[2] > 20)counter[2] = 0;
+		if (counter[2] > 35)counter[2] = 0;
 		break;
 
 	case 20:
