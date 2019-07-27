@@ -20,7 +20,7 @@ bit3 flag parameter change program mode, knob pushed
 bit4 flag, stepper in 0 position true
 bit5 flag, knop inS programmeer knop vastgehouden ingedrukt
 bit6 flag program mode true
-bit7 nc
+bit7 niu
   
 MEM_reg   EEPROM adres #0
 bit0 //direction start

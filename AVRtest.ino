@@ -34,6 +34,8 @@ byte shiftbyte;
 byte shiftled;//bit0~2
 byte switchcount;
 byte switchstatus;
+boolean status;
+
 unsigned long Ctime;
 unsigned long Stime;
 
@@ -539,8 +541,8 @@ void SHIFT() {
 }
 
 void switches() {
-	boolean status;
-	status = bitRead(PINB, 4);
+	//boolean status;
+	//status = bitRead(PINB, 4);
 	if (status != bitRead(switchstatus, switchcount)) {
 		if (status == false) { //switch pushed
 			switchstatus &= ~(1 << switchcount); //klopt eigenlijk niet 
@@ -565,8 +567,7 @@ void switches() {
 				if (bitRead(COM_reg, 4) == true) COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				break;
 			case 2: //positie schakelaar, meerdere functies mogelijk, voorlopig alleen de init stop	
-				//shiftbyte &= ~(15 << 4);	
-				shiftbyte = 0;
+				shiftbyte &= ~(15 << 4);	
 				if (prgmode == 3) { //no stop continue heen en weer in prgmode 3 (speed)
 					COM_reg ^= (1 << 0); //toggle direction
 				}
@@ -581,7 +582,6 @@ void switches() {
 		}
 		else { //switch released
 			switchstatus |= (1 << switchcount); //klopt niet eigenlijk, switchcount is decimal, switchstatus binair tot 3 kan dit
-
 			switch (switchcount) {
 			case 0: //
 				if (prgmode > 0) {
@@ -672,6 +672,9 @@ void switches() {
 		}
 	}
 	leddir();
+
+	status = true;
+
 }
 void prgEnd() {
 
@@ -711,17 +714,21 @@ void Shift1() {
 
 void slowevents() {
 	//read switches, set leds
+
 	counter[0] ++;
-	if (counter[0] > 50) {
+	if (counter[0] > 65) {
 		counter[0] = 0;
+		switches();
+	}
+
+	if (counter[0] == 60) {
 		switchset();
 		SHIFT();
-		switches();
+		status = bitRead(PINB, 4);
 		ledset();
 		SHIFT();
+		
 		//initial start
-
-		counter[4]++;
 		if (bitRead(COM_reg, 2) == true) {
 
 			if (counter[4] == 20) {
@@ -742,17 +749,15 @@ void slowevents() {
 					//debug(1);
 					counter[5]++;
 				}
-
 			}
 		}
-
-
-
+		counter[4]++;
 	}
 
 	stepcount++;
 	if (stepcount > speed & bitRead(COM_reg, 1) == true) { //speed 2 = minimum
 		stepcount = 0;
+		
 		steps(); //omschakelbaar maken? van steps4 naar steps????
 		SHIFT();
 	}
@@ -797,5 +802,5 @@ void loop() {
 	//SHIFT();
 	slowcount++;
 	DEK_DCCh();
-	if (slowcount == 0)slowevents();
+	if (slowcount == 0) slowevents();		
 }
