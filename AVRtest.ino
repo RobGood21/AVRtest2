@@ -26,6 +26,9 @@ byte DEK_Buf4[12];
 byte DEK_Buf5[12];
 //end dekoder declarations**********************************
 
+unsigned int DCCadres;
+
+
 byte func; //0=wisselaandrijving, 1= continue, 2= multi postie
 byte COM_reg;
 byte SW_reg;
@@ -81,7 +84,11 @@ void setup()
 	switchstatus = 7;
 	COM_reg |= (1 << 2);
 }
-
+void MEM_clear() {
+	for (byte i = 0; i < 100; i++) {
+		EEPROM.update(i, 0xFF); //clear 1e 100bytes of eeprom
+	}
+}
 void MEM_read() {
 	MEM_reg = EEPROM.read(0);
 
@@ -90,20 +97,18 @@ void MEM_read() {
 		speed = 5;
 		EEPROM.update(1, speed);
 	}
-
-	/*
-	EEPROM.get(2, Targetposition); //int 4 bytes
-	if (Targetposition > 650) {
-		Targetposition = 400;
-		EEPROM.put(2, Targetposition);
-	}
-*/
 	Targetposition = EEPROM.read(2);
 	if (Targetposition > 70) {
 		Targetposition = 50;
 		EEPROM.update(2, Targetposition);
 	}
 	Targetposition = Targetposition * 10;
+
+	EEPROM.get(5, DCCadres);
+	if (DCCadres == 0xFFFF) {
+		DCCadres = 1;
+		EEPROM.put(5, 1);
+	}
 }
 void MEM_change() {
 	byte temp;
@@ -302,13 +307,13 @@ void DEK_BitRX() { //new version
 void DEK_DCCh() { //handles incoming DCC commands, called from loop()
 	static byte n = 0; //one buffer each passing
 	byte temp;
-	int decoder;
-	int channel = 1;
-	int adres;
+	unsigned int decoder;
+	unsigned int channel = 1;
+	unsigned int adres;
 	boolean port = false;
 	boolean onoff = false;
-	int cv;
-	int value;
+	unsigned int cv;
+	unsigned int value;
 
 	//translate command
 	if (bitRead(DEK_BufReg[n], 7) == true) {
@@ -349,7 +354,7 @@ void DEK_DCCh() { //handles incoming DCC commands, called from loop()
 	n++;
 	if (n > 12)n = 0;
 }
-void COM_exe(boolean type, int decoder, int channel, boolean port, boolean onoff, int cv, int value) {
+void COM_exe(boolean type, unsigned int decoder, unsigned int channel, boolean port, boolean onoff, unsigned int cv, unsigned int value) {
 
 	//type=CV(true) or switch(false)
 	//decoder basic adres of decoder 
@@ -366,17 +371,31 @@ void COM_exe(boolean type, int decoder, int channel, boolean port, boolean onoff
 }
 //dekoder end**********************************
 
-void APP_exe(boolean type, int adres, int decoder, int channel, boolean port, boolean onoff, int cv, int value) {
-	if (adres < 5) {
+void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned int channel, boolean port, boolean onoff, unsigned int cv, unsigned int value) {
+	if (bitRead(COM_reg, 3) == true) { //waiting for setting DCC adres.
+		COM_reg &= ~(1 << 3);
+		DCCadres = adres;
+		EEPROM.put(5, adres);
+		prgEnd();
+	}
+	else {
+		if (adres == DCCadres) {
+			if (cv == false) { //switch command
+				if (port == true) {
+					COM_reg |= (1 << 0);
+					if (Currentposition == 0) COM_reg |= (1 << 1); //Start alleen vanuit een nulpositie, richting wisselen terwijl stepper draaid wel.
+				}
+				else {
+					COM_reg &= ~(1 << 0);
+					COM_reg |= (1 << 1);
+				}
+				switchstatus |= (1 << 2);
+			}
+			else {//CV commando
+				ledmode = 5;
+			}
 
 
-		if (port == true) {
-			shiftbyte |= (1 << 3);
-			//PORTB |= (1 << 1);
-		}
-		else {
-			shiftbyte &= ~(1 << 3);
-			//PORTB &= ~(1 << 1);
 		}
 	}
 }
@@ -491,7 +510,7 @@ void stopstep() {
 			if (prgmode == 3) {
 				COM_reg &= ~(1 << 0); //direction return
 			}
-			else if(bitRead(MEM_reg,2)==true){ //stop stepper only in wisselaandrijving mode 
+			else if (bitRead(MEM_reg, 2) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
 			}
@@ -618,6 +637,12 @@ void switches() {
 				case 5: //mode
 					prgcom(2);
 					break;
+				case 6: //DCCCadres
+					COM_reg |= (1 << 3);
+					break;
+				case 7:
+					prg7();
+					break;
 				}
 				break;
 				//****************** end start prg mode
@@ -636,8 +661,6 @@ void switches() {
 				//stop stepper always
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
-
-
 				if (bitRead(COM_reg, 6) == true) { //stop program mode
 					prgEnd();
 				}
@@ -648,7 +671,7 @@ void switches() {
 					COM_reg |= (1 << 7); //next prgmode flag
 					counter[2] = 0;
 					counter[3] = 0;
-					if (prgmode > 6) prgEnd(); // stops programmode, no more programs.
+					if (prgmode > 7) prgEnd(); // stops programmode, no more programs.
 				}
 			}
 		}
@@ -719,6 +742,25 @@ void prg4() {
 	shiftled &= ~(1 << 1);
 	if (bitRead(MEM_reg, 1) == true)shiftled |= (1 << 1);
 }
+void prg7() { //factory reset
+	switch (prgfase) {
+	case 0:
+		shiftled &= ~(1 << 1); //kill green led
+		break;
+	case 1:
+		shiftled |= (1 << 1); //lite green led		
+		break;
+	case 2:
+		ledmode = 5; //flash green led
+		break;
+	case 3:
+		//clear memorie
+		MEM_clear();
+		prgEnd();
+		break;
+	}
+	prgfase++;
+}
 void prgcom(byte mem) {
 	switch (prgfase) {
 	case 0:
@@ -735,9 +777,9 @@ void prgcom(byte mem) {
 void prgEnd() {
 	ledmode = 20;
 	counter[2] = 0;
+	counter[3] = 0;
 	counter[5] = 0;
 	COM_reg &= ~(1 << 6);
-	MEM_change(); //store changes in EEPROM
 	//switchstatus = 0x0;
 	switchstatus |= (1 << 2); //reset position switch
 	Currentposition = 0;
@@ -745,6 +787,7 @@ void prgEnd() {
 	COM_reg |= (1 << 1);
 	prgmode = 0;
 	prgfase = 0;
+	MEM_change(); //store changes in EEPROM
 }
 
 void setTarget() {
@@ -853,6 +896,11 @@ void blink() {
 				}
 			}
 			if (counter[2] > 30)counter[2] = 0;
+			break;
+
+
+		case 5:
+			shiftled ^= (1 << 1);
 			break;
 
 		case 20:
