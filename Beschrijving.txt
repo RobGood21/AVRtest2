@@ -16,15 +16,19 @@ COM_reg
 bit0 direction stepper false=rechtsom naar switch, true = linksom
 bit1 stepper run, true, stop false
 bit2 flag init direction
-bit3 flag parameter change program mode, knob pushed
+bit3 niu
 bit4 flag, stepper in 0 position true
 bit5 flag, knop inS programmeer knop vastgehouden ingedrukt
 bit6 flag program mode true
-bit7 niu
+bit7 flag next program mode
+
+SW_reg
+bit0 niu
   
 MEM_reg   EEPROM adres #0
 bit0 //direction start
-bit1 //bediening single true, duo false
+bit1 //knopmode MONO true, DUO false
+bit2 //mode als wisselaandrijving true, als continue motor false.
 
 
 counter[s]
