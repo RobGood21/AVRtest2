@@ -88,17 +88,19 @@ void MEM_clear() {
 	for (byte i = 0; i < 100; i++) {
 		EEPROM.update(i, 0xFF); //clear 1e 100bytes of eeprom
 	}
+	delay(50);
+	setup();
 }
 void MEM_read() {
 	MEM_reg = EEPROM.read(0);
 
 	speed = EEPROM.read(1);
-	if (speed > 100) {
+	if (speed > 60) {
 		speed = 5;
 		EEPROM.update(1, speed);
 	}
 	Targetposition = EEPROM.read(2);
-	if (Targetposition > 70) {
+	if (Targetposition == 0xFF) { //alleen na een factory reset
 		Targetposition = 50;
 		EEPROM.update(2, Targetposition);
 	}
@@ -388,14 +390,29 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 				else {
 					COM_reg &= ~(1 << 0);
 					COM_reg |= (1 << 1);
+					COM_reg |= (1 << 4);
 				}
 				switchstatus |= (1 << 2);
 			}
 			else {//CV commando
-				ledmode = 5;
+				switch (cv) {
+				case 8: //factory reset
+					if (value == 10) {
+						MEM_clear();
+					}
+					break;
+				case 10: //position
+					Targetposition = value * 10;
+					MEM_change();
+					break;
+				case 11: //speed
+					if (value > 0 & value < 60) {
+						speed = value;
+						MEM_change();
+					}
+					break;					
+				}
 			}
-
-
 		}
 	}
 }
@@ -497,20 +514,22 @@ void speedx() {
 	else {
 		speed = speed - add;
 	}
-	if (speed > 80 | speed < 2)shiftled ^= (1 << 1);
+	if (speed > 60 | speed < 2)shiftled ^= (1 << 1);
 }
 void stopstep() {
 	switch (prgmode) {
-	case 2:
+
+	case 2: //distance
 		//do nothing
 		break;
+	case 3:
+		COM_reg &= ~(1 << 0); //direction return
+		break;
+
 	default: //stop stepper
-		if (Currentposition == Targetposition) {
+		if (Currentposition == Targetposition & bitRead(COM_reg, 4) == true) {
 			COM_reg &= ~(1 << 4);
-			if (prgmode == 3) {
-				COM_reg &= ~(1 << 0); //direction return
-			}
-			else if (bitRead(MEM_reg, 2) == true) { //stop stepper only in wisselaandrijving mode 
+			if (bitRead(MEM_reg, 2) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
 			}
@@ -575,7 +594,7 @@ void switches() {
 						COM_reg &= ~(1 << 0); //set clockwise
 						switchstatus |= (1 << 2);
 					}
-
+					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
 					COM_reg |= (1 << 1); //start stepper
 					break;
 				case 1: //change startup direction
