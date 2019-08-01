@@ -1,14 +1,25 @@
 /*
-	Name:       AVRtest.ino
-	Created:	5-7-2019 23:01:40
-	Author:     DESKTOP-UUF0FDC\gebruiker
+	Name:       AVRtest.ino/ singel stepper driver
+	Created:	summer 2019
+	Version:    V1.01
+	Author:     Rob Antonisse
 
-	diverse testen met Attiny85
-	om dekoder te laten werken moet attiny op 16Mhz internal clock, branden met arduino IDE? VS schijnt dat niet te doen...
+
+	Atmel attiny85 program for driving a unipolaid steppermotor like 28byj-48
+	Two working modes: as switch engine or slow motor with high torque.
+	Many progammable parameters see www.wisselmotor.nl for manual
+
+	Notes:
+	Clockspeed Internal 16Mhz. To set by bootloader burn with arduino IDE
+	I Used Arduino as ISP programmer
+	I used Microsoft Visual studio 2017 with visualmicro as plugin (https://www.visualmicro.com/)
+	PCB available at https://sites.google.com/site/wisselmotor/ or https://www.pcbway.com
+
 */
 
 #include <EEPROM.h>
-//Declaraties Dekoder attiny85 begin ********
+
+//Declarations Dekoder attiny85
 volatile unsigned long DEK_Tperiode; //laatst gemeten tijd 
 volatile unsigned int DEK_duur; //gemeten duur van periode tussen twee interupts
 boolean DEK_Monitor = false; //shows DCC commands as bytes
@@ -24,76 +35,59 @@ byte DEK_Buf2[12];
 byte DEK_Buf3[12];
 byte DEK_Buf4[12];
 byte DEK_Buf5[12];
-//end dekoder declarations**********************************
+//end dekoder declarations
 
 unsigned int DCCadres;
-
-
-byte func; //0=wisselaandrijving, 1= continue, 2= multi postie
-byte COM_reg;
-byte SW_reg;
-byte MEM_reg; //register in eeprom
-volatile unsigned int count = 0;
-byte shiftbyte;
-byte shiftled;//bit0~2
-byte switchcount;
-byte switchstatus;
-boolean status;
-
-unsigned long Ctime;
-unsigned long Stime;
-
+byte COM_reg; //common flag register
+byte MEM_reg; //EEPROM memorie register
+byte shiftbyte;//databyte to shiftregister
+byte shiftled;//databyte status leds
+byte switchcount; //counter
+byte switchstatus; //register for status switches
+boolean status;//state of input port B4
 byte stepcount; //ff int
+byte stepfase;//fase in stepper cycle
+byte speed;//speed of stepper movement
+byte counter[6]; //general purpose counters
+byte prgmode;//mode of program
+byte prgfase; //fase in programcycle
+byte ledmode;//blinking effects mode
+int Currentposition; //current position of stepper
+int Targetposition; //target position for stepper
 
-byte stepfase;
-byte speed; //ff int
-byte speedcount;
-
-byte teller;
-byte slowcount;
-byte counter[6]; //diverse tellers
-byte prgmode;
-byte prgfase; //fase van programmaverloop
-byte ledmode;
-int Currentposition; //ook negatieve getallen mogelijk????
-int Targetposition;
 void setup()
 {
-	DDRB |= (1 << 3); //portB3 as output
+	//setup ports 
+	DDRB |= (1 << 3);
 	DDRB |= (1 << 1);
 	DDRB |= (1 << 2);
-	DDRB |= (1 << 5); //port5 as output
+	DDRB |= (1 << 5);
+	DDRB &= ~(1 << 4);
+	DDRB &= ~(1 << 0);
+	PORTB |= (1 << 4);//pull-up to pb4   	 
 
-
-	DDRB &= ~(1 << 4); //port b4 input
-	DDRB &= ~(1 << 0); //port b0 input
-	PORTB |= (1 << 4); //pull-up  to pb4 (pin3)   	 
-
-
-	//DeKoder Attiny85 part, interrupt on PIN5 (PB0)
+	//DeKoder Attiny85 part, interrupt on PIN5 (PB0); setup interupt
 	PCMSK |= (1 << 0); //pin change mask register bit 0 = PB0
 	//DDRD &= ~(1 << 2);//bitClear(DDRD, 2); //pin2 input
 	DEK_Tperiode = micros();
 	MCUCR |= (1 << 0);//EICRA – External Interrupt Control Register A bit0 > 1 en bit1 > 0 (any change)
-	//EICRA &= ~(1 << 1);	//bitClear(EICRA, 1);
-	//EIMSK |= (1 << INT0);//bitSet(EIMSK, INT0);//EIMSK – External Interrupt Mask Register bit0 INT0 > 1
 	GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
-
-	//start
+	//initialise
 	MEM_read();
-	switchstatus = 7;
-	COM_reg |= (1 << 2);
+	switchstatus = 7; //clear status of switches
+	COM_reg |= (1 << 2); //start init
 }
 void MEM_clear() {
+	//clears 1e 100bytes of eeprom and restart
 	for (byte i = 0; i < 100; i++) {
-		EEPROM.update(i, 0xFF); //clear 1e 100bytes of eeprom
+		EEPROM.update(i, 0xFF);
 	}
 	delay(50);
 	setup();
 }
 void MEM_read() {
+	//setup from memorie
 	MEM_reg = EEPROM.read(0);
-
 	speed = EEPROM.read(1);
 	if (speed > 60) {
 		speed = 5;
@@ -105,7 +99,6 @@ void MEM_read() {
 		EEPROM.update(2, Targetposition);
 	}
 	Targetposition = Targetposition * 10;
-
 	EEPROM.get(5, DCCadres);
 	if (DCCadres == 0xFFFF) {
 		DCCadres = 1;
@@ -121,11 +114,11 @@ void MEM_change() {
 	//restore parameters
 	MEM_read();
 }
-
 void leddir() {
+	//sets state of control leds
 	if (prgmode == 0 & ledmode == 0) {
 		if (bitRead(COM_reg, 0) == false) {
-			shiftbyte |= (1 << 3); //dit is nu de rode led.
+			shiftbyte |= (1 << 3);
 			shiftled &= ~(3 << 0);
 		}
 		else {
@@ -134,41 +127,14 @@ void leddir() {
 		}
 	}
 }
-void debug(byte type) {
-
-	switch (type) {
-	case 0: //count 255 led 3
-		teller++;
-		if (teller == 0) shiftbyte ^= (1 << 3);
-		break;
-	case 1: //toggle led 4
-		shiftbyte ^= (1 << 3);
-		break;
-	}
-
-}
-
-
-//deKoder Attiny85 begin ********************************************************
-ISR(PCINT0_vect) { //syntax voor een ISR
-				   //isr van PIN2
-	//DEK_Reg fase van bit ontvangst
-	//bit 0= bitpart ok (1) of failed(0)
-	//bit1= truepart 
-	//bit2=falsepart
-	//bit3= received bit true =true false =false
-	//bit4=restart, begin, failed as true
-
-
-
+//deKoder for Attiny85 
+ISR(PCINT0_vect) {
 	cli();
 	DEK_duur = (micros() - DEK_Tperiode);
 	DEK_Tperiode = micros();
 	if (DEK_duur > 50) {
 		if (DEK_duur < 62) {
 			DEK_Reg |= (1 << 0); //bitSet(DekReg, 0);
-
-
 			if (bitRead(DEK_Reg, 1) == false) {
 				DEK_Reg &= ~(1 << 2); //bitClear(DekReg, 2);
 				DEK_Reg |= (1 << 1);
@@ -238,9 +204,9 @@ void DEK_BufCom(boolean CV) { //create command in Buffer
 			i = 15;
 		}
 		i++;
-	} //close for loop
-} //close void
-void DEK_BitRX() { //new version
+	}
+}
+void DEK_BitRX() {
 	static byte countbit = 0; //counter received bits
 	static byte countbyte = 0;
 	static byte n = 0;
@@ -372,8 +338,8 @@ void COM_exe(boolean type, unsigned int decoder, unsigned int channel, boolean p
 	APP_exe(type, adres, decoder, channel, port, onoff, cv, value);
 }
 //dekoder end**********************************
-
 void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned int channel, boolean port, boolean onoff, unsigned int cv, unsigned int value) {
+	//execute of received DCC commands
 	if (bitRead(COM_reg, 3) == true) { //waiting for setting DCC adres.
 		COM_reg &= ~(1 << 3);
 		DCCadres = adres;
@@ -383,7 +349,8 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 	else {
 		if (adres == DCCadres) {
 			if (cv == false) { //switch command
-				if (port == true) {
+				if (port^bitRead(MEM_reg, 3) == 1) {
+					//if (port == true) {
 					COM_reg |= (1 << 0);
 					if (Currentposition == 0) COM_reg |= (1 << 1); //Start alleen vanuit een nulpositie, richting wisselen terwijl stepper draaid wel.
 				}
@@ -410,14 +377,25 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 						speed = value;
 						MEM_change();
 					}
-					break;					
+					break;
+				case 12: //Orientatie
+					switch (value) {
+					case 0:
+						MEM_reg &= ~(1 << 3);
+						break;
+					case 1://default
+						MEM_reg |= (1 << 3);
+						break;
+					}
+					MEM_change();
+					break;
 				}
 			}
 		}
 	}
 }
-
 void steps() {
+	//STEPPER in HALFSTEP mode
 	byte step;
 	step = stepfase;
 	//false stand is voor de all goods steppers...
@@ -463,13 +441,9 @@ void steps() {
 	}
 	stopstep();
 }
+/*
 void step4() {
-	//volgorde spoelen kan wisselen FULL stepper
-	/*
-	voor snellere bewegingen eens ijken of onder een bepaalde snelheid naar een 4 steps kan worden omgeschakeld.
-	Nu is 2ms het snelst voor koppel
-		*/
-
+//stepper in FULLstep mode
 	byte step;
 	step = stepfase;
 
@@ -504,7 +478,7 @@ void step4() {
 	}
 	stopstep();
 }
-
+*/
 void speedx() {
 	byte add;
 	add = 1 + (speed / 5);
@@ -518,7 +492,6 @@ void speedx() {
 }
 void stopstep() {
 	switch (prgmode) {
-
 	case 2: //distance
 		//do nothing
 		break;
@@ -558,24 +531,13 @@ void switchset() { //sets the switch pulses to be shifted
 		break;
 	}
 }
-
 void SHIFT() {
-	/*
-	aansluitingen SIPO SN74HC595
-	SER ser data  attiny pin 6, PB1 > pin 14 SER
-	SRCLK (shift command) attiny pin 7, PB2 > pin 11
-	RCLK (latch command) attiny pin 2, PB3 > pin 12
-
-	bit 3-7
-	bit 0-2 via 3 schakelaars terugleiden naar portB4 deze als input, na shift port b4 lezen overeenkomend met welke uitgang
-	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
-	*/
 	Shift1();
 	PINB |= (1 << 3);
 	PINB |= (1 << 3);
 }
-
 void switches() {
+	//handles all manual switch events
 	byte wait;
 	if (status != bitRead(switchstatus, switchcount)) {
 		if (status == false) { //switch pushed
@@ -605,14 +567,10 @@ void switches() {
 					break;
 				}
 				break;
-
 			case 1: //secundaire switch alleen extern aan te sluiten
 				COM_reg |= (1 << 0); //direction counter clockwise left
 				if (bitRead(COM_reg, 4) == true) COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				break;
-
-
-
 			case 2: //position switch 
 				shiftbyte &= ~(15 << 4);
 
@@ -792,8 +750,8 @@ void prgcom(byte mem) {
 	shiftled &= ~(1 << 1);
 	if (bitRead(MEM_reg, mem) == true)shiftled |= (1 << 1);
 }
-
 void prgEnd() {
+	//ends, closes program mode
 	ledmode = 20;
 	counter[2] = 0;
 	counter[3] = 0;
@@ -808,7 +766,6 @@ void prgEnd() {
 	prgfase = 0;
 	MEM_change(); //store changes in EEPROM
 }
-
 void setTarget() {
 	Targetposition = 600;
 }
@@ -821,27 +778,21 @@ void Shift1() {
 		PINB |= (1 << 2);
 	}
 }
-
 void slowevents() {
-	//read switches, set leds
-
+	//called 1x in 255 loop cycles
 	counter[0] ++;
 	if (counter[0] > 65) {
 		counter[0] = 0;
 		switches();
 	}
-
 	if (counter[0] == 60) {
 		switchset();
 		SHIFT();
 		ledset();
 		status = bitRead(PINB, 4);
-
 		SHIFT();
-
 		//initial start
 		if (bitRead(COM_reg, 2) == true) {
-
 			if (counter[4] == 20) {
 				counter[4] = 0;
 				COM_reg &= ~(1 << 0);
@@ -864,18 +815,15 @@ void slowevents() {
 		}
 		counter[4]++;
 	}
-
 	stepcount++;
 	if (stepcount > speed & bitRead(COM_reg, 1) == true) { //speed 2 = minimum
 		stepcount = 0;
-
 		steps(); //Steps=half stepper, step4=full stepper
 		SHIFT();
 	}
 }
-
 void blink() {
-
+	//drives all kind of effects on control leds
 	if (bitRead(COM_reg, 7) == true) {
 		//overgang signaal
 		counter[2]++;
@@ -892,20 +840,16 @@ void blink() {
 		}
 	}
 	else {
-
 		//rode led op pin3 van de shiftregister
 		switch (ledmode) {
 		case 0:
 			break;
-
 		case 1: //program fase 1
 			counter[2]++;
 			if (counter[2] == 3)shiftbyte |= (1 << 3);
-
 			if (counter[2] == 4) {
 				shiftbyte &= ~(1 << 3);
 				counter[3]++;
-
 				if (counter[3] >= prgmode) {
 					counter[2] = 20;
 					counter[3] = 0;
@@ -916,12 +860,9 @@ void blink() {
 			}
 			if (counter[2] > 30)counter[2] = 0;
 			break;
-
-
 		case 5:
 			shiftled ^= (1 << 1);
 			break;
-
 		case 20:
 			counter[2]++;
 			if (counter[2] == 2) {
@@ -941,8 +882,7 @@ void blink() {
 	}
 }
 void loop() {
-	//SHIFT();
-	slowcount++;
 	DEK_DCCh();
-	if (slowcount == 0) slowevents();
+	GPIOR2++; //use general purpose register as slow events counter
+	if (GPIOR2 == 0) slowevents();
 }

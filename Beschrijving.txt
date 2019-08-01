@@ -9,7 +9,16 @@ C code geeft fout aanduidingen maar worden wel gecompileerd
 
 Het eeprom van de attiny wordt geinitialiseerd (512 x 0xFF) tijdens uploaden van nieuw program. 
 
+	/*
+	aansluitingen SIPO SN74HC595
+	SER ser data  attiny pin 6, PB1 > pin 14 SER
+	SRCLK (shift command) attiny pin 7, PB2 > pin 11
+	RCLK (latch command) attiny pin 2, PB3 > pin 12
 
+	bit 3-7
+	bit 0-2 via 3 schakelaars terugleiden naar portB4 deze als input, na shift port b4 lezen overeenkomend met welke uitgang
+	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
+	*/
 
 
 COM_reg
@@ -21,14 +30,12 @@ bit4 flag, stepper in 0 position true
 bit5 flag, knop inS programmeer knop vastgehouden ingedrukt
 bit6 flag program mode true
 bit7 flag next program mode
-
-SW_reg
-bit0 niu
   
 MEM_reg   EEPROM adres #0
-bit0 //direction start
-bit1 //knopmode MONO true, DUO false
-bit2 //mode als wisselaandrijving true, als continue motor false.
+bit0 direction start
+bit1 knopmode MONO true, DUO false
+bit2 mode als wisselaandrijving true, als continue motor false.
+bit3 Orientatie bij DCC aansturing
 
 
 counter[s]
