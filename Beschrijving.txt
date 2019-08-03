@@ -24,6 +24,9 @@ Het eeprom van de attiny wordt geinitialiseerd (512 x 0xFF) tijdens uploaden van
 	van de shiftregister dan laag is. 3 schakelaars drukknoppen dus....
 	*/
 
+	leds rode staat op bit3 van schiftregister, groene op bit1. groene wordt telekens ff weggehaald om schakelaars uit te lezen.
+
+
 
 COM_reg
 bit0 direction stepper false=rechtsom naar switch, true = linksom

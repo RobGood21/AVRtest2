@@ -509,7 +509,6 @@ void stopstep() {
 	case 3:
 		if (end == true & bitRead(MEM_reg, 2) == true) COM_reg ^= (1 << 0); //direction return
 		break;
-
 	default: //stop stepper
 		if (end == true & bitRead(COM_reg, 4) == true) {
 			COM_reg &= ~(1 << 4);
@@ -517,9 +516,10 @@ void stopstep() {
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
 			}
+			leddir();
 		}
 		break;
-	}
+	}	
 }
 void ledset() { //sets the leds to be shifted out
 	shiftbyte &= ~(7 << 0); //clear bit 0~2
@@ -557,7 +557,6 @@ void switches() {
 			case 0: //primaire switch op pcb
 				COM_reg |= (1 << 5);
 				counter[5] = 0;
-
 				switch (prgmode) {
 				case 0:
 					if (bitRead(MEM_reg, 1) == true) {
@@ -569,8 +568,8 @@ void switches() {
 					}
 					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
 					COM_reg |= (1 << 1); //start stepper
+					if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 					break;
-
 				case 1: //change startup direction
 					break;
 				case 3:
@@ -580,12 +579,11 @@ void switches() {
 				}
 				break;
 			case 1: //secundaire switch alleen extern aan te sluiten
-
 				if (bitRead(COM_reg, 4) == true) {
 					COM_reg |= (1 << 1); //start stepper  only if position switch is set
 					COM_reg |= (1 << 0); //direction counter clockwise left
 				}
-
+				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
 
 			case 2: //position switch 
@@ -597,9 +595,9 @@ void switches() {
 					shiftbyte &= ~(15 << 4);
 					COM_reg &= ~(1 << 1); //stop stepper					
 				}
-
 				Currentposition = 0;
 				COM_reg |= (1 << 4); //stepper in 0 position
+				leddir();
 				break;
 			}
 		}
@@ -607,8 +605,7 @@ void switches() {
 			switchstatus |= (1 << switchcount); //klopt niet eigenlijk, switchcount is decimal, switchstatus binair tot 3 kan dit
 			switch (switchcount) {
 			case 0: //
-				if (prgmode > 0) {
-					//debug(1);
+				if (prgmode > 0) {	
 					COM_reg &= ~(1 << 5);
 					counter[5] = 0;
 					COM_reg |= (1 << 6); //flag for ending program mode
@@ -641,15 +638,12 @@ void switches() {
 				break;
 				//****************** end start prg mode
 			case 1: //release switch2 
-				if (bitRead(MEM_reg, 1) == true){
-				switchstatus |= (1 << 2);
-				COM_reg |= (1 << 1); //start stepper  only if position switch is set
-				COM_reg &= ~(1 << 0); //direction counter clockwise left
+				if (bitRead(MEM_reg, 1) == true) {
+					switchstatus |= (1 << 2);
+					COM_reg |= (1 << 1); //start stepper  only if position switch is set
+					COM_reg &= ~(1 << 0); //direction counter clockwise left
 				}
-				//)
-				//if (COM_reg, 4 == false) {
-				//Currentposition = 0;
-			//}
+				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
 			case 2: //release position switch 
 				break;
@@ -681,7 +675,6 @@ void switches() {
 			}
 		}
 	}
-	leddir();
 	status = true;
 }
 void prg2() {
@@ -829,7 +822,6 @@ void slowevents() {
 				COM_reg |= (1 << 1);
 				COM_reg &= ~(1 << 2);
 				switchstatus = 0xFF;
-				leddir();
 			}
 		}
 		else {
@@ -869,9 +861,30 @@ void blink() {
 		}
 	}
 	else {
-		//rode led op pin3 van de shiftregister
 		switch (ledmode) {
 		case 0:
+			if (bitRead(COM_reg, 1) == true) { //stepper runs
+				counter[2]++;			
+				if (counter[2] == 2) {
+					if (bitRead(COM_reg, 0) == false) {
+						shiftbyte |= (1 << 3); //red on
+						shiftled &=~(1 << 1); //green off
+					}
+					else {
+						shiftled |=(1 << 1); //green on
+						shiftbyte &= ~(1 << 3);
+					}
+				}
+				if (counter[2] == 4) {
+					counter[2] = 0;
+					if (bitRead(COM_reg, 0) == false) {
+						shiftbyte &= ~(1 << 3);
+					}
+					else {
+						shiftled &=~(1 << 1); //green off
+					}
+				}
+			}
 			break;
 		case 1: //program fase 1
 			counter[2]++;
@@ -908,7 +921,6 @@ void blink() {
 			}
 			break;
 		}
-
 	}
 }
 void loop() {
