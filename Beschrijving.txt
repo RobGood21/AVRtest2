@@ -7,6 +7,10 @@ Uploaden bootloader nog niet gelukt vanuit VS wel vanuit Arduino.IDE
 elco tussen reset en gnd, geen idee waarom.... 
 C code geeft fout aanduidingen maar worden wel gecompileerd
 
+voeding voor de Attiny aanleveren uit het breadboard.
+AMS1117 heeft twee condensatortjes minimaal 22uf nodig.
+
+
 Het eeprom van de attiny wordt geinitialiseerd (512 x 0xFF) tijdens uploaden van nieuw program. 
 
 	/*

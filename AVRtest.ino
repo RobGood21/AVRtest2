@@ -57,6 +57,7 @@ int Targetposition; //target position for stepper
 
 void setup()
 {
+	delay(200);
 	//setup ports 
 	DDRB |= (1 << 3);
 	DDRB |= (1 << 1);
@@ -87,30 +88,36 @@ void MEM_clear() {
 }
 void MEM_read() {
 	//setup from memorie
-	MEM_reg = EEPROM.read(0);
-	speed = EEPROM.read(1);
+	MEM_reg = EEPROM.read(10);
+	speed = EEPROM.read(11);
 	if (speed > 60) {
 		speed = 5;
-		EEPROM.update(1, speed);
+		EEPROM.update(11, speed);
+		delay(100);
 	}
-	Targetposition = EEPROM.read(2);
+	Targetposition = EEPROM.read(12);
 	if (Targetposition == 0xFF) { //alleen na een factory reset
 		Targetposition = 50;
-		EEPROM.update(2, Targetposition);
+		EEPROM.update(12, Targetposition);
+		delay(100);
 	}
 	Targetposition = Targetposition * 10;
-	EEPROM.get(5, DCCadres);
+	EEPROM.get(15, DCCadres);
 	if (DCCadres == 0xFFFF) {
 		DCCadres = 1;
-		EEPROM.put(5, 1);
+		EEPROM.put(15, 1);
+		delay(100);
 	}
 }
 void MEM_change() {
 	byte temp;
-	EEPROM.update(0, MEM_reg);
-	EEPROM.update(1, speed);
+	EEPROM.update(10, MEM_reg);
+	delay(100);
+	EEPROM.update(11, speed);
+	delay(100);
 	temp = Targetposition / 10;
-	EEPROM.update(2, temp);
+	EEPROM.update(12, temp);
+	delay(100);
 	//restore parameters
 	MEM_read();
 }
@@ -343,7 +350,7 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 	if (bitRead(COM_reg, 3) == true) { //waiting for setting DCC adres.
 		COM_reg &= ~(1 << 3);
 		DCCadres = adres;
-		EEPROM.put(5, adres);
+		EEPROM.put(15, adres);
 		prgEnd();
 	}
 	else {
@@ -484,23 +491,27 @@ void speedx() {
 	add = 1 + (speed / 5);
 	if (bitRead(shiftled, 1) == true) {
 		speed = speed + add;
+		if (speed > 59)speed = 60;
 	}
 	else {
 		speed = speed - add;
 	}
-	if (speed > 60 | speed < 2)shiftled ^= (1 << 1);
+
+	if (speed == 60 | speed < 3)shiftled ^= (1 << 1); //max speed =2
 }
 void stopstep() {
+	boolean end = false;
+	if (Currentposition == Targetposition)end = true;
 	switch (prgmode) {
 	case 2: //distance
 		//do nothing
 		break;
 	case 3:
-		COM_reg &= ~(1 << 0); //direction return
+		if (end == true & bitRead(MEM_reg, 2) == true) COM_reg ^= (1 << 0); //direction return
 		break;
 
 	default: //stop stepper
-		if (Currentposition == Targetposition & bitRead(COM_reg, 4) == true) {
+		if (end == true & bitRead(COM_reg, 4) == true) {
 			COM_reg &= ~(1 << 4);
 			if (bitRead(MEM_reg, 2) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
@@ -559,6 +570,7 @@ void switches() {
 					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
 					COM_reg |= (1 << 1); //start stepper
 					break;
+
 				case 1: //change startup direction
 					break;
 				case 3:
@@ -568,17 +580,22 @@ void switches() {
 				}
 				break;
 			case 1: //secundaire switch alleen extern aan te sluiten
-				COM_reg |= (1 << 0); //direction counter clockwise left
-				if (bitRead(COM_reg, 4) == true) COM_reg |= (1 << 1); //start stepper  only if position switch is set
-				break;
-			case 2: //position switch 
-				shiftbyte &= ~(15 << 4);
 
+				if (bitRead(COM_reg, 4) == true) {
+					COM_reg |= (1 << 1); //start stepper  only if position switch is set
+					COM_reg |= (1 << 0); //direction counter clockwise left
+				}
+
+				break;
+
+			case 2: //position switch 
 				if (prgmode == 3) { //no stop
 					COM_reg ^= (1 << 0); //toggle direction
+					//COM_reg &=~(1 << 0);
 				}
 				else {
-					COM_reg &= ~(1 << 1); //stop stepper
+					shiftbyte &= ~(15 << 4);
+					COM_reg &= ~(1 << 1); //stop stepper					
 				}
 
 				Currentposition = 0;
@@ -624,6 +641,15 @@ void switches() {
 				break;
 				//****************** end start prg mode
 			case 1: //release switch2 
+				if (bitRead(MEM_reg, 1) == true){
+				switchstatus |= (1 << 2);
+				COM_reg |= (1 << 1); //start stepper  only if position switch is set
+				COM_reg &= ~(1 << 0); //direction counter clockwise left
+				}
+				//)
+				//if (COM_reg, 4 == false) {
+				//Currentposition = 0;
+			//}
 				break;
 			case 2: //release position switch 
 				break;
@@ -638,10 +664,12 @@ void switches() {
 				//stop stepper always
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
+
 				if (bitRead(COM_reg, 6) == true) { //stop program mode
 					prgEnd();
 				}
 				else {
+					prgfase = 0;
 					prgmode++;
 					ledmode = 1;
 					counter[5] = 0;
@@ -694,6 +722,7 @@ void prg3() { //speed
 		else {
 			COM_reg |= (1 << 0);
 		}
+
 		COM_reg |= (1 << 1); //start stepper
 		shiftled &= ~(1 << 1); //kill green led
 		prgfase++;
@@ -835,7 +864,7 @@ void blink() {
 			shiftled &= ~(1 << 1);
 			shiftbyte &= ~(1 << 3);
 			counter[2] = 0;
-			counter[3] = 0;
+			//counter[3] = 0;
 			COM_reg &= ~(1 << 7);
 		}
 	}
@@ -873,7 +902,8 @@ void blink() {
 			if (counter[2] == 20) {
 				shiftled &= ~(1 << 1);
 				shiftbyte &= ~(1 << 3);
-				counter[2] == 0;
+				counter[2] = 0;
+				//counter[3] = 0;
 				ledmode = 0;
 			}
 			break;
