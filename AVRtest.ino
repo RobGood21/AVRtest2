@@ -15,6 +15,8 @@
 	I used Microsoft Visual studio 2017 with visualmicro as plugin (https://www.visualmicro.com/)
 	PCB available at https://sites.google.com/site/wisselmotor/ or https://www.pcbway.com
 
+	default direction for steppers can be set in void steps
+
 */
 
 #include <EEPROM.h>
@@ -39,6 +41,7 @@ byte DEK_Buf5[12];
 
 unsigned int DCCadres;
 byte COM_reg; //common flag register
+byte COM_reg2; //common flag register 2
 byte MEM_reg; //EEPROM memorie register
 byte shiftbyte;//databyte to shiftregister
 byte shiftled;//databyte status leds
@@ -52,8 +55,10 @@ byte counter[6]; //general purpose counters
 byte prgmode;//mode of program
 byte prgfase; //fase in programcycle
 byte ledmode;//blinking effects mode
-int Currentposition; //current position of stepper
-int Targetposition; //target position for stepper
+signed int Currentposition; //current position of stepper
+signed int Targetposition; //target position for stepper
+byte speling=50; //motoras speling
+
 
 void setup()
 {
@@ -89,6 +94,11 @@ void MEM_clear() {
 void MEM_read() {
 	//setup from memorie
 	MEM_reg = EEPROM.read(10);
+
+	//for working debugging turntable mode
+	MEM_reg &= ~(3 << 1);
+
+
 	speed = EEPROM.read(11);
 	if (speed > 60) {
 		speed = 5;
@@ -405,7 +415,8 @@ void steps() {
 	//STEPPER in HALFSTEP mode
 	byte step;
 	step = stepfase;
-	//false stand is voor de all goods steppers...
+	//true stand is voor de all goods steppers...(blauwe V)
+	//False is voor model met groene grote letters (rood hashtag)
 	if (bitRead(MEM_reg, 0) == true) step = 7 - step;
 	shiftbyte &= ~(15 << 4);
 	switch (step) {
@@ -454,8 +465,8 @@ void step4() {
 	byte step;
 	step = stepfase;
 
-	//false stand is voor de all goods steppers...
-	if (bitRead(MEM_reg, 0) == false) step = 3 - step;
+	//true stand is voor de all goods steppers...
+	if (bitRead(MEM_reg, 0) == true) step = 3 - step;
 	shiftbyte &= ~(15 << 4);
 	switch (step) {
 	case 0:
@@ -509,17 +520,20 @@ void stopstep() {
 	case 3:
 		if (end == true & bitRead(MEM_reg, 2) == true) COM_reg ^= (1 << 0); //direction return
 		break;
+
 	default: //stop stepper
 		if (end == true & bitRead(COM_reg, 4) == true) {
 			COM_reg &= ~(1 << 4);
-			if (bitRead(MEM_reg, 2) == true) { //stop stepper only in wisselaandrijving mode 
+			if (bitRead(MEM_reg, 2) == true | bitRead(COM_reg2, 0) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
+				COM_reg2 &= ~(1 << 0);
+				COM_reg2 &= ~(1 << 1);
 			}
 			leddir();
 		}
 		break;
-	}	
+	}
 }
 void ledset() { //sets the leds to be shifted out
 	shiftbyte &= ~(7 << 0); //clear bit 0~2
@@ -563,13 +577,19 @@ void switches() {
 						COM_reg ^= (1 << 0); //toggle direction
 					}
 					else {
-						COM_reg &= ~(1 << 0); //set clockwise
-						switchstatus |= (1 << 2);
+						COM_reg &= ~(1 << 0); //set clockwise.
+
+						//switchstatus |= (1 << 2); //uit tbv draaischijf mode 2sept2019
 					}
+
 					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
 					COM_reg |= (1 << 1); //start stepper
 					if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
+
+					COM_reg2 &= ~(1 << 1); //flag first position make before action on break
+
 					break;
+
 				case 1: //change startup direction
 					break;
 				case 3:
@@ -579,33 +599,44 @@ void switches() {
 				}
 				break;
 			case 1: //secundaire switch alleen extern aan te sluiten
-				if (bitRead(COM_reg, 4) == true) {
-					COM_reg |= (1 << 1); //start stepper  only if position switch is set
-					COM_reg |= (1 << 0); //direction counter clockwise left
-				}
+				//if (bitRead(COM_reg, 4) == true) { //weg 3-9
+				COM_reg |= (1 << 1); //start stepper  only if position switch is set
+				COM_reg |= (1 << 0); //direction counter clockwise left
+
+				COM_reg2 &= ~(1 << 1); //flag first position make before action on break
+
+									   //}
 				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
 
-			case 2: //position switch 
-				if (prgmode == 3) { //no stop
-					COM_reg ^= (1 << 0); //toggle direction
-					//COM_reg &=~(1 << 0);
+			case 2: //position switch	
+				if (bitRead(COM_reg2, 0) == false) {
+					COM_reg2 |= (1 << 1);
+
+					if (prgmode == 3) { //no stop
+						COM_reg ^= (1 << 0); //toggle direction
+						//COM_reg &=~(1 << 0);
+					}
+					else {
+						if (bitRead(MEM_reg, 2) == true) {
+							shiftbyte &= ~(15 << 4);
+							COM_reg &= ~(1 << 1); //stop stepper
+						}
+					}
+					Currentposition = 0;
+					COM_reg |= (1 << 4); //stepper in 0 position	
+					leddir();
+
 				}
-				else {
-					shiftbyte &= ~(15 << 4);
-					COM_reg &= ~(1 << 1); //stop stepper					
-				}
-				Currentposition = 0;
-				COM_reg |= (1 << 4); //stepper in 0 position
-				leddir();
 				break;
 			}
 		}
+
 		else { //switch released
 			switchstatus |= (1 << switchcount); //klopt niet eigenlijk, switchcount is decimal, switchstatus binair tot 3 kan dit
 			switch (switchcount) {
 			case 0: //
-				if (prgmode > 0) {	
+				if (prgmode > 0) {
 					COM_reg &= ~(1 << 5);
 					counter[5] = 0;
 					COM_reg |= (1 << 6); //flag for ending program mode
@@ -645,7 +676,32 @@ void switches() {
 				}
 				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
-			case 2: //release position switch 
+			case 2: //release position switch 	
+
+				//in motor mode stopt motor nu als position switch weer vrij komt, hier terugdraaien naar de helft van de draai sinds position switch aan ...? 
+				//currentposition = 0 +- gedraaid met switch aan. 
+				if (bitRead(COM_reg2, 1) == true) {//dit werkt alleen NAdat position switch actief is geweest
+
+
+
+					if (bitRead(MEM_reg, 2) == false & bitRead(COM_reg2, 0) == false) {
+						//shiftbyte &= ~(15 << 4);
+						//COM_reg &= ~(1 << 1); //stop stepper
+						COM_reg ^= (1 << 0);
+						if (bitRead(COM_reg, 0) == false) {
+							Targetposition = (Currentposition / 2) - speling;
+						}
+						else {
+							Targetposition = (Currentposition / 2) + speling;
+						}
+
+
+						COM_reg2 |= (1 << 0);
+						COM_reg |= (1 << 4); //???
+					}
+
+
+				}
 				break;
 			}
 		}
@@ -864,14 +920,14 @@ void blink() {
 		switch (ledmode) {
 		case 0:
 			if (bitRead(COM_reg, 1) == true) { //stepper runs
-				counter[2]++;			
+				counter[2]++;
 				if (counter[2] == 2) {
 					if (bitRead(COM_reg, 0) == false) {
 						shiftbyte |= (1 << 3); //red on
-						shiftled &=~(1 << 1); //green off
+						shiftled &= ~(1 << 1); //green off
 					}
 					else {
-						shiftled |=(1 << 1); //green on
+						shiftled |= (1 << 1); //green on
 						shiftbyte &= ~(1 << 3);
 					}
 				}
@@ -881,7 +937,7 @@ void blink() {
 						shiftbyte &= ~(1 << 3);
 					}
 					else {
-						shiftled &=~(1 << 1); //green off
+						shiftled &= ~(1 << 1); //green off
 					}
 				}
 			}
