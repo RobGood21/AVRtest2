@@ -2,8 +2,8 @@ Beschrijving DutChie a EscapeWorld project
 Is puzzel van het roer in 'the Flying Dutchman'  Escaperooms Waterloo plein Amsterdam
 
 switchstatus
-bit0 Test switch
-bit1
+bit0 reed1
+bit1 reed2
 bit2
 bit3
 bit4
@@ -13,3 +13,8 @@ COM_reg
 bit0= testmode true, Work false
 bit1 reedcontact wordt gelezen 0=true, 1=false
 bit2 direction right true, left false
+bit3
+bit4
+bit5
+bit6
+bit7 timer bit gamereset

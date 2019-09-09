@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="AVRtest.ino" />
+    <None Include="DutChie.vcxproj" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="__vm\.AVRtest.vsarduino.h">
