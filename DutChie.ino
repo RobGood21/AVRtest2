@@ -21,6 +21,8 @@ unsigned int slowtimer;
 byte countright;
 byte countleft;
 byte solved;
+byte resetcount;
+
 void setup() {
 	delay(200);
 	//setup ports 
@@ -62,9 +64,19 @@ void slowevents() {
 	byte status;
 	byte sw;
 
+	//reset game procedure to kill all kind of startup issues
+	if (bitRead(COM_reg, 7) == false) {
+		resetcount++;
+		if (resetcount > 200) {
+			COM_reg |= (1 << 7);
+			resetGame();
+		}
+	}
+
+
+
 	//check switch status TEST switch
 	status = bitRead(PINB, 0);
-
 
 	if (status != testswitch) {
 		if (status == false) {

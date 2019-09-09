@@ -124,7 +124,7 @@
   </ImportGroup>
   <ProjectExtensions>
     <VisualStudio>
-      <UserProperties custom_attiny_ATtinyX5_attiny85_clock="internal8" />
+      <UserProperties vm.upload.useprogrammer="1" custom_attiny_ATtinyX5_attiny85_clock="internal8" arduino.upload.port="COM4" />
     </VisualStudio>
   </ProjectExtensions>
 </Project>
