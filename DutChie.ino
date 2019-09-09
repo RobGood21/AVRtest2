@@ -6,7 +6,7 @@
  Attiny85 sketch for puzzel of the ruder of The Flying Dutchman room
 
  Attiny85 bootloader burn internal clock 8Mhz
-
+ 33
 
 */
 
@@ -18,10 +18,20 @@ byte encoderstatus;
 byte testswitch;
 byte COM_reg;
 unsigned int slowtimer;
-byte countright;
-byte countleft;
-byte solved;
 byte resetcount;
+
+byte gameTurn[6] = { 3,1,4,3,4,2 };
+byte gameFase;
+byte turncount;
+unsigned int candleTimer;
+unsigned int CandleDelay;
+byte candle;
+
+/*
+3 turns right, 1 turn left
+4 turns right, 3 turns left
+4 turns right, 2 turns left
+*/
 
 void setup() {
 	delay(200);
@@ -36,13 +46,15 @@ void setup() {
 	PORTB |= (1 << 0); //internal pullup to pin 5 PB0
 	PORTB |= (1 << 4);//pull-up to pb4   	 
 
-
 	//shiftbyte = B00000001;
 	resetGame();
 }
 
 void resetGame() {
 	shiftbyte = B10000000;
+	gameFase = 0;
+	turncount = 0;
+	COM_reg |= (1 << 3); //requested direction true (right)
 }
 
 void shift() {
@@ -63,7 +75,13 @@ void Shift1() {
 void slowevents() {
 	byte status;
 	byte sw;
-
+	//Timer to delay lighting of candle after correct code, needed to hide exact sensor position
+	candleTimer++;
+	if (candleTimer == 0) candleTimer++;
+	if (candleTimer == CandleDelay) {
+		CandleDelay = 0;
+		shiftbyte |= (1 << candle);
+	}
 	//reset game procedure to kill all kind of startup issues
 	if (bitRead(COM_reg, 7) == false) {
 		resetcount++;
@@ -72,9 +90,6 @@ void slowevents() {
 			resetGame();
 		}
 	}
-
-
-
 	//check switch status TEST switch
 	status = bitRead(PINB, 0);
 
@@ -83,7 +98,6 @@ void slowevents() {
 			testswitch = false;
 			COM_reg ^= (1 << 0);
 			test();
-
 		}
 		else {
 			testswitch = true;
@@ -101,16 +115,11 @@ void slowevents() {
 		sw = 1;
 	}
 	shift();
-
 	//test reeds
 	status = bitRead(PINB, 4);
 	if (status != bitRead(switchstatus, sw)) {
-
-
-
 		if (status == false) {
 			switchstatus &= ~(1 << sw);
-
 			if (bitRead(COM_reg, 0) == true)shiftbyte |= (1 << sw + 4);
 		}
 		else {
@@ -120,16 +129,8 @@ void slowevents() {
 		if (bitRead(COM_reg, 0) == false) encoder(sw, status);
 	}
 	shift();
-	//counter++;
-	//if (counter == 0)shiftbyte++;
 }
 void encoder(byte sw, boolean onoff) {
-	//if onoff==false reed closed, true is open, sw1 =reed 1 sw2=reed 2
-	switchstatus = switchstatus << 6;
-	switchstatus = switchstatus >> 6;
-
-	shiftbyte &= ~(B01110000 << 0);
-
 	if (onoff == false) { //een reed gesloten
 		switch (encoderstatus) {
 		case B11: //both open
@@ -152,27 +153,20 @@ void encoder(byte sw, boolean onoff) {
 		}
 	}
 	else { //een reed open
-
 		if (switchstatus == 3) { //both open
-
 			//shiftbyte |= (1 << 6);
-
-			
-
-						switch (encoderstatus) {
-						case B01:
-							action(5);
-							break;
-						case B10:
-							action(6);
-							break;
-						}		
-
+			switch (encoderstatus) {
+			case B01:
+				action(5);
+				break;
+			case B10:
+				action(6);
+				break;
+			}
 		}
 	}
 	encoderstatus = switchstatus;
 }
-
 void action(byte event) {
 	/*
 	1 R aangegaan
@@ -183,36 +177,58 @@ void action(byte event) {
 	6 L gaat als laatste uit, rotatie R
 	*/
 	switch (event) {
-
 	case 1:
 		COM_reg |= (1 << 2);
-		//shiftbyte &= ~(B01110000 << 0);
-		//shiftbyte |= (1 << 4);
 		break;
 	case 2:
 		COM_reg &= ~(1 << 2);
-		//shiftbyte &= ~(B01110000 << 0);
-		//shiftbyte |= (1 << 5);
 		break;
-
 	case 5:
 		if (bitRead(COM_reg, 2) == false) {
-
-			shiftbyte |= (B00100000 << 0);
-
+			game(false);
 		}
 		break;
 	case 6:
 		if (bitRead(COM_reg, 2) == true) {
-
-			shiftbyte |= (B00010000 << 0);
+			game(true);
 		}
-
 		break;
-
 	}
 }
-
+void game(boolean dir) {
+	if (dir == bitRead(COM_reg, 3)) {
+		turncount++;
+		if (turncount == gameTurn[gameFase]) {
+			COM_reg ^= (1 << 3); //toggle requested direction
+			
+			turncount = 0;
+			gameFase++;
+			if (bitRead(COM_reg, 3) == true)candles();
+			if (gameFase > 5) gameSolved();
+		}
+	}
+	else { //wrong direction
+		resetGame();
+	}
+}
+void candles() {
+	switch (gameFase) {
+	case 2:
+		candle = 4;
+		break;
+	case 4:
+		candle = 5;
+		break;
+	case 6:
+		candle = 6;
+		break;
+	}
+	CandleDelay = random(200, 1000);
+	candleTimer = 100;
+}
+void gameSolved() {
+	shiftbyte &= ~(1 << 7);
+}
 void test() {
 	if (bitRead(COM_reg, 0) == true) {
 		//start testmode
