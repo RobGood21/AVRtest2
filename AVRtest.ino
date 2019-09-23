@@ -569,8 +569,18 @@ void switches() {
 			switchstatus &= ~(1 << switchcount); //klopt eigenlijk niet 
 			switch (switchcount) {
 			case 0: //primaire switch op pcb
-				COM_reg |= (1 << 5);
 				counter[5] = 0;
+				if (bitRead(MEM_reg, 1) == false) {
+					if (bitRead(switchstatus, 1) == false) { //beide knoppen moeten worden ingedrukt, alleen bij begin programma
+						COM_reg |= (1 << 5);
+						//counter[5] = 0;
+					}
+				}
+				else { //alleen knop1 indrukken is genoeg
+					COM_reg |= (1 << 5);
+					//counter[5] = 0;
+				}
+
 				switch (prgmode) {
 				case 0:
 					if (bitRead(MEM_reg, 1) == true) {
@@ -637,7 +647,7 @@ void switches() {
 			switch (switchcount) {
 			case 0: //
 				if (prgmode > 0) {
-					COM_reg &= ~(1 << 5);
+					COM_reg &= ~(1 << 5); //reset program
 					counter[5] = 0;
 					COM_reg |= (1 << 6); //flag for ending program mode
 				}
@@ -669,6 +679,8 @@ void switches() {
 				break;
 				//****************** end start prg mode
 			case 1: //release switch2 
+
+
 				if (bitRead(MEM_reg, 1) == true) {
 					switchstatus |= (1 << 2);
 					COM_reg |= (1 << 1); //start stepper  only if position switch is set

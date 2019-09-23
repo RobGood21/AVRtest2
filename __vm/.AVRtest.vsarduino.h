@@ -16,7 +16,7 @@
 #define __AVR_attiny85__
 #define __AVR_ATTINY85__
 #define F_CPU 8000000L
-#define ARDUINO 10809
+#define ARDUINO 108010
 #define ARDUINO_attiny
 #define ARDUINO_ARCH_AVR
 #define __cplusplus 201103L
@@ -76,6 +76,6 @@ typedef void *__builtin_va_list;
 #define pgm_read_float(address_short) float()
 #define pgm_read_ptr(address_short)   short()
 
-#include "DutChie.ino"
+#include "AVRtest.ino"
 #endif
 #endif
