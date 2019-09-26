@@ -1,7 +1,7 @@
 /*
 	Name:       AVRtest.ino/ singel stepper driver
 	Created:	summer 2019
-	Version:    V1.01
+	Version:    V1.02
 	Author:     Rob Antonisse
 
 
@@ -57,7 +57,8 @@ byte prgfase; //fase in programcycle
 byte ledmode;//blinking effects mode
 signed int Currentposition; //current position of stepper
 signed int Targetposition; //target position for stepper
-byte speling=50; //motoras speling
+
+byte speling = 50; //motoras speling
 
 
 void setup()
@@ -112,6 +113,15 @@ void MEM_read() {
 		delay(100);
 	}
 	Targetposition = Targetposition * 10;
+
+	speling = EEPROM.read(13);
+	if (speling == 0xFF) {
+		speling = 50;
+		EEPROM.update(13, speling);
+		delay(100);
+	}
+
+
 	EEPROM.get(15, DCCadres);
 	if (DCCadres == 0xFFFF) {
 		DCCadres = 1;
@@ -128,19 +138,26 @@ void MEM_change() {
 	temp = Targetposition / 10;
 	EEPROM.update(12, temp);
 	delay(100);
+	EEPROM.update(13, speling);
+	delay(100);
 	//restore parameters
 	MEM_read();
 }
 void leddir() {
 	//sets state of control leds
+
 	if (prgmode == 0 & ledmode == 0) {
 		if (bitRead(COM_reg, 0) == false) {
 			shiftbyte |= (1 << 3);
-			shiftled &= ~(3 << 0);
+			//shiftled &= ~(3 << 0);
+			shiftled &= ~(1 << 1);
+			if (bitRead(MEM_reg, 1) == true) shiftled &= ~(1 << 0);
 		}
 		else {
 			shiftbyte &= ~(1 << 3);
-			shiftled |= (3 << 0);
+			//shiftled |= (3 << 0);
+			shiftled |= (1 << 1);
+			if (bitRead(MEM_reg, 1) == true) shiftled |= (1 << 0);
 		}
 	}
 }
@@ -376,7 +393,7 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 					COM_reg |= (1 << 1);
 					COM_reg |= (1 << 4);
 				}
-				switchstatus |= (1 << 2);
+				//switchstatus |= (1 << 2);
 			}
 			else {//CV commando
 				switch (cv) {
@@ -404,6 +421,10 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 						MEM_reg |= (1 << 3);
 						break;
 					}
+					MEM_change();
+					break;
+				case 13: //speling
+					speling = value;
 					MEM_change();
 					break;
 				}
@@ -932,6 +953,7 @@ void blink() {
 		switch (ledmode) {
 		case 0:
 			if (bitRead(COM_reg, 1) == true) { //stepper runs
+
 				counter[2]++;
 				if (counter[2] == 2) {
 					if (bitRead(COM_reg, 0) == false) {
@@ -952,7 +974,12 @@ void blink() {
 						shiftled &= ~(1 << 1); //green off
 					}
 				}
+				shiftled &= ~(1 << 0);
 			}
+			else {
+				shiftled |= (1 << 0);
+			}
+
 			break;
 		case 1: //program fase 1
 			counter[2]++;
