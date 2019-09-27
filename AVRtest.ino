@@ -97,7 +97,10 @@ void MEM_read() {
 	MEM_reg = EEPROM.read(10);
 
 	//for working debugging turntable mode
-	MEM_reg &= ~(3 << 1);
+	//MEM_reg &= ~(3 << 1);
+
+	//for working DUO mode
+	//MEM_reg &= ~(1 << 1);
 
 
 	speed = EEPROM.read(11);
@@ -609,14 +612,13 @@ void switches() {
 					}
 					else {
 						COM_reg &= ~(1 << 0); //set clockwise.
-
-						//switchstatus |= (1 << 2); //uit tbv draaischijf mode 2sept2019
+						if(bitRead(MEM_reg,2)==true)  switchstatus |= (1 << 2); //27-9 niet in continue mode
 					}
 
 					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
+
 					COM_reg |= (1 << 1); //start stepper
 					if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
-
 					COM_reg2 &= ~(1 << 1); //flag first position make before action on break
 
 					break;
@@ -630,13 +632,16 @@ void switches() {
 				}
 				break;
 			case 1: //secundaire switch alleen extern aan te sluiten
-				//if (bitRead(COM_reg, 4) == true) { //weg 3-9
+				
+				
+				
+				if (bitRead(COM_reg, 4) == true | bitRead(MEM_reg,2)==false) { //als continue mode altijd, anders alleen als positionswitch = true
 				COM_reg |= (1 << 1); //start stepper  only if position switch is set
 				COM_reg |= (1 << 0); //direction counter clockwise left
-
 				COM_reg2 &= ~(1 << 1); //flag first position make before action on break
+				}
 
-									   //}
+
 				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
 
