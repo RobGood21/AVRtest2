@@ -17,6 +17,8 @@
 
 	default direction for steppers can be set in void steps
 
+	laatste aanpassing op regel 399
+
 */
 
 #include <EEPROM.h>
@@ -396,7 +398,8 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 					COM_reg |= (1 << 1);
 					COM_reg |= (1 << 4);
 				}
-				//switchstatus |= (1 << 2);
+				switchstatus |= (1 << 2); //**is nodig anders start WA mode verkeerd, nog niet op demoplank getest.
+
 			}
 			else {//CV commando
 				switch (cv) {
