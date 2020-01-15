@@ -1,7 +1,7 @@
 /*
 	Name:       AVRtest.ino/ singel stepper driver
 	Created:	summer 2019
-	Version:    V1.02
+	Version:    V1.03
 	Author:     Rob Antonisse
 
 
@@ -18,10 +18,12 @@
 	default direction for steppers can be set in void steps
 
 	laatste aanpassing op regel 399
+	tijden in ISR aangepast veel minder kritisch gemaakt, werkt nu op alle Attinies
 
 */
 
 #include <EEPROM.h>
+#define fout DEK_Reg &=~(1<<4)
 
 //Declarations Dekoder attiny85
 volatile unsigned long DEK_Tperiode; //laatst gemeten tijd 
@@ -178,8 +180,8 @@ ISR(PCINT0_vect) {
 	cli();
 	DEK_duur = (micros() - DEK_Tperiode);
 	DEK_Tperiode = micros();
-	if (DEK_duur > 50) {
-		if (DEK_duur < 62) {
+	if (DEK_duur > 40) { //50
+		if (DEK_duur < 75) { //62
 			DEK_Reg |= (1 << 0); //bitSet(DekReg, 0);
 			if (bitRead(DEK_Reg, 1) == false) {
 				DEK_Reg &= ~(1 << 2); //bitClear(DekReg, 2);
@@ -193,9 +195,9 @@ ISR(PCINT0_vect) {
 			}
 		}
 		else {
-			if (DEK_duur > 106) {
+			if (DEK_duur > 95) { //106
 
-				if (DEK_duur < 124) { //preferred 118 6us extra space in false bit
+				if (DEK_duur < 150) { //124 //preferred 118 6us extra space in false bit
 					DEK_Reg |= (1 << 0); //bitSet(DekReg, 0);
 					if (bitRead(DEK_Reg, 2) == false) {
 						DEK_Reg &= ~(1 << 1); //bitClear(DekReg, 1);
@@ -268,7 +270,8 @@ void DEK_BitRX() {
 				countbit = 0;
 				countbyte = 0;
 			}
-			bitClear(DEK_Reg, 4);
+			fout;
+			//bitClear(DEK_Reg, 4);
 		}
 		break;
 		//*************************
@@ -279,7 +282,8 @@ void DEK_BitRX() {
 			DEK_Status = 2;
 		}
 		//if Dekreg bit 3= true no action needed.
-		bitClear(DEK_Reg, 4); //correct, so resume process
+		fout;
+		//bitClear(DEK_Reg, 4); //correct, so resume process
 		break;
 		//*************************
 	case 2: //receiving data
@@ -290,13 +294,14 @@ void DEK_BitRX() {
 			DEK_Status = 3;
 			countbyte++;
 		}
-		bitClear(DEK_Reg, 4); //correct, so resume process
+		fout;
+		//bitClear(DEK_Reg, 4); //correct, so resume process
 		break;
 		//*************************
 	case 3: //waiting for separating or end bit
 		if (bitRead(DEK_Reg, 3) == false) { //false bit
 			DEK_Status = 2; //next byte
-			if ((bitRead(DEK_byteRX[0], 6) == false) & (bitRead(DEK_byteRX[0], 7) == true))bitClear(DEK_Reg, 4); //correct, so resume process	
+			if ((bitRead(DEK_byteRX[0], 6) == false) & (bitRead(DEK_byteRX[0], 7) == true)) fout;//bitClear(DEK_Reg, 4); //correct, so resume process	
 		}
 		else { //true bit, end bit, only 3 byte and 6 byte commands handled by this dekoder
 			switch (countbyte) {

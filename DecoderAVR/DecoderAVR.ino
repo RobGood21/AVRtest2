@@ -4,14 +4,17 @@
  Author:	robAntonisse
 
  Dekoder bedoeld voor ATTINY85
+ bedenk bij aanpassingen, bij uploaden geen DCC aanbieden op PIN5
+
 
 */
 
+#define fout DEK_Reg &=~(1<<4)
 
 
 //Declarations Dekoder attiny85
-byte COM_reg;
-byte DCCadres;
+byte COM_reg = 0;
+int DCCadres;
 volatile unsigned long DEK_Tperiode; //laatst gemeten tijd 
 volatile unsigned int DEK_duur; //gemeten duur van periode tussen twee interupts
 boolean DEK_Monitor = false; //shows DCC commands as bytes
@@ -30,23 +33,30 @@ byte DEK_Buf5[12];
 //end dekoder declarations
 
 void setup() {
-	DDRB |= (1 << 3);
-
-//DeKoder Attiny85 part, interrupt on PIN5 (PB0); setup interupt
-SREG |= (1 << 0);
-PCMSK |= (1 << 0); //pin change mask register bit 0 = PB0
-//DDRD &= ~(1 << 2);//bitClear(DDRD, 2); //pin2 input
-DEK_Tperiode = micros();
-MCUCR |= (1 << 0);//EICRA – External Interrupt Control Register A bit0 > 1 en bit1 > 0 (any change)
-GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
-//initialise
+	DDRB |= (1 << 4);
+	//DeKoder Attiny85 part, interrupt on PIN5 (PB0); setup interupt
+	SREG |= (1 << 0);
+	PCMSK |= (1 << 0); //pin change mask register bit 0 = PB0
+	//DDRD &= ~(1 << 2);//bitClear(DDRD, 2); //pin2 input
+	DEK_Tperiode = micros();
+	MCUCR |= (1 << 0);//EICRA – External Interrupt Control Register A bit0 > 1 en bit1 > 0 (any change)
+	GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
+	//initialise
+	DCCadres = 1;
 }
+
+
 ISR(PCINT0_vect) {
 	cli();
+	//Tijden niet te krap zetten.....//50 waren originele waardes // anders doen sommige attinies het niet...
+	//PINB |= (1 << 4); //shows if bit received
+
+
 	DEK_duur = (micros() - DEK_Tperiode);
 	DEK_Tperiode = micros();
-	if (DEK_duur > 50) {
-		if (DEK_duur < 62) {
+
+	if (DEK_duur > 45) { //50
+		if (DEK_duur < 70) { //62
 			DEK_Reg |= (1 << 0); //bitSet(DekReg, 0);
 			if (bitRead(DEK_Reg, 1) == false) {
 				DEK_Reg &= ~(1 << 2); //bitClear(DekReg, 2);
@@ -60,9 +70,9 @@ ISR(PCINT0_vect) {
 			}
 		}
 		else {
-			if (DEK_duur > 106) {
+			if (DEK_duur > 100) { //106
 
-				if (DEK_duur < 124) { //preferred 118 6us extra space in false bit
+				if (DEK_duur < 150) { //124 preferred 118 6us extra space in false bit
 					DEK_Reg |= (1 << 0); //bitSet(DekReg, 0);
 					if (bitRead(DEK_Reg, 2) == false) {
 						DEK_Reg &= ~(1 << 1); //bitClear(DekReg, 1);
@@ -78,9 +88,13 @@ ISR(PCINT0_vect) {
 			}
 		}
 	}
+	//DEK_Tperiode = micros();
 	sei();
 }
+
 void DEK_begin() {//runs when bit is corrupted, or command not correct
+
+	//PINB |= (1 << 4); //shows if bit received
 	//lesscount++;
 	DEK_countPA = 0;
 	DEK_Reg = 0;
@@ -90,6 +104,10 @@ void DEK_begin() {//runs when bit is corrupted, or command not correct
 	}
 }
 void DEK_BufCom(boolean CV) { //create command in Buffer
+
+	//PINB |= (1 << 4); //shows if passed
+
+
 	byte i = 0;
 	while (i < 12) {
 
@@ -120,6 +138,7 @@ void DEK_BufCom(boolean CV) { //create command in Buffer
 	}
 }
 void DEK_BitRX() {
+
 	static byte countbit = 0; //counter received bits
 	static byte countbyte = 0;
 	static byte n = 0;
@@ -135,21 +154,25 @@ void DEK_BitRX() {
 				countbit = 0;
 				countbyte = 0;
 			}
-			bitClear(DEK_Reg, 4);
+			fout;
+			//bitClear(DEK_Reg, 4);
 		}
 		break;
 		//*************************
 	case 1: //Waiting for false startbit
 
 		if (bitRead(DEK_Reg, 3) == false) { //startbit receive
+
 			DEK_countPA = 0;
 			DEK_Status = 2;
 		}
 		//if Dekreg bit 3= true no action needed.
-		bitClear(DEK_Reg, 4); //correct, so resume process
+		fout;
+		//bitClear(DEK_Reg, 4); //correct, so resume process
 		break;
 		//*************************
-	case 2: //receiving data
+	case 2: //receiving data		
+
 		if (bitRead(DEK_Reg, 3) == true) DEK_byteRX[countbyte] |= (1 << (7 - countbit));
 		countbit++;
 		if (countbit == 8) {
@@ -157,15 +180,17 @@ void DEK_BitRX() {
 			DEK_Status = 3;
 			countbyte++;
 		}
-		bitClear(DEK_Reg, 4); //correct, so resume process
+		fout;
+		//bitClear(DEK_Reg, 4); //correct, so resume process
 		break;
 		//*************************
 	case 3: //waiting for separating or end bit
 		if (bitRead(DEK_Reg, 3) == false) { //false bit
 			DEK_Status = 2; //next byte
-			if ((bitRead(DEK_byteRX[0], 6) == false) & (bitRead(DEK_byteRX[0], 7) == true))bitClear(DEK_Reg, 4); //correct, so resume process	
+			if ((bitRead(DEK_byteRX[0], 6) == false) & (bitRead(DEK_byteRX[0], 7) == true)) fout; // bitClear(DEK_Reg, 4); //correct, so resume process	
 		}
 		else { //true bit, end bit, only 3 byte and 6 byte commands handled by this dekoder
+
 			switch (countbyte) {
 			case 3: //Basic Accessory Decoder Packet received
 				//check error byte
@@ -247,10 +272,11 @@ void COM_exe(boolean type, unsigned int decoder, unsigned int channel, boolean p
 	int adres;
 	adres = ((decoder - 1) * 4) + channel;
 	//Applications 
-	//APP_Monitor(type, adres, decoder, channel, port, onoff, cv, value);
-	//APP_exe(type, adres, decoder, channel, port, onoff, cv, value);
+	APP_exe(type, adres, decoder, channel, port, onoff, cv, value);
 }
 //dekoder end**********************************
+
+
 void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned int channel, boolean port, boolean onoff, unsigned int cv, unsigned int value) {
 	//execute of received DCC commands
 	if (bitRead(COM_reg, 3) == true) { //waiting for setting DCC adres.
@@ -258,12 +284,25 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 		DCCadres = adres;
 	}
 	else {
+
 		if (adres == DCCadres) {
+			//PINB |= (1 << 4); //shows if bit received
+
+			if (port == true) {
+				PORTB |= (1 << 4);
+			}
+			else {
+				PORTB &= ~(1 << 4);
+			}
 		}
 	}
+
+
 }
 
-
 void loop() {
-	PINB |= (1 << 3);
+	//For dekoderAVR
+	DEK_DCCh();
+	//PINB |= (1 << 4);
+
 }
