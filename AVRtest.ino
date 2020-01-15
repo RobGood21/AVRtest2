@@ -42,6 +42,7 @@ byte DEK_Buf5[12];
 //end dekoder declarations
 
 unsigned int DCCadres;
+
 byte COM_reg; //common flag register
 byte COM_reg2; //common flag register 2
 byte MEM_reg; //EEPROM memorie register
@@ -76,12 +77,18 @@ void setup()
 	PORTB |= (1 << 4);//pull-up to pb4   	 
 
 	//DeKoder Attiny85 part, interrupt on PIN5 (PB0); setup interupt
+	SREG |= (1 << 0);
+
+
+
 	PCMSK |= (1 << 0); //pin change mask register bit 0 = PB0
 	//DDRD &= ~(1 << 2);//bitClear(DDRD, 2); //pin2 input
 	DEK_Tperiode = micros();
 	MCUCR |= (1 << 0);//EICRA – External Interrupt Control Register A bit0 > 1 en bit1 > 0 (any change)
 	GIMSK |= (1 << 5); //PCIE: Pin Change Interrupt Enable
 	//initialise
+
+
 	MEM_read();
 	switchstatus = 7; //clear status of switches
 	COM_reg |= (1 << 2); //start init
