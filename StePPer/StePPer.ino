@@ -20,6 +20,10 @@
 	laatste aanpassing op regel 399
 	tijden in ISR aangepast veel minder kritisch gemaakt, werkt nu op alle Attinies
 
+	V2.01
+	Geheel, pcb en programma aanpassen en uitbreiden juli2022
+
+
 */
 
 #include <EEPROM.h>
