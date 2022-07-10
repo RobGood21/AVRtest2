@@ -164,7 +164,7 @@ void MEM_change() {
 void leddir() {
 	//sets state of control leds
 
-	if (prgmode == 0 & ledmode == 0) {
+	if (prgmode == 0 && ledmode == 0) {
 		if (bitRead(COM_reg, 0) == false) {
 			shiftbyte |= (1 << 3);
 			//shiftled &= ~(3 << 0);
@@ -305,7 +305,7 @@ void DEK_BitRX() {
 	case 3: //waiting for separating or end bit
 		if (bitRead(DEK_Reg, 3) == false) { //false bit
 			DEK_Status = 2; //next byte
-			if ((bitRead(DEK_byteRX[0], 6) == false) & (bitRead(DEK_byteRX[0], 7) == true)) fout;//bitClear(DEK_Reg, 4); //correct, so resume process	
+			if ((bitRead(DEK_byteRX[0], 6) == false) && (bitRead(DEK_byteRX[0], 7) == true)) fout;//bitClear(DEK_Reg, 4); //correct, so resume process	
 		}
 		else { //true bit, end bit, only 3 byte and 6 byte commands handled by this dekoder
 			switch (countbyte) {
@@ -429,7 +429,7 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 					MEM_change();
 					break;
 				case 11: //speed
-					if (value > 0 & value < 60) {
+					if (value > 0 && value < 60) {
 						speed = value;
 						MEM_change();
 					}
@@ -502,7 +502,9 @@ void steps() {
 	}
 	stopstep();
 }
-/*
+
+ 
+ 
 void step4() {
 //stepper in FULLstep mode
 	byte step;
@@ -539,7 +541,7 @@ void step4() {
 	}
 	stopstep();
 }
-*/
+
 void speedx() {
 	byte add;
 	add = 1 + (speed / 5);
@@ -551,7 +553,7 @@ void speedx() {
 		speed = speed - add;
 	}
 
-	if (speed == 60 | speed < 3)shiftled ^= (1 << 1); //max speed =2
+	if (speed == 60 || speed < 3)shiftled ^= (1 << 1); //max speed =2
 }
 void stopstep() {
 	boolean end = false;
@@ -561,11 +563,11 @@ void stopstep() {
 		//do nothing
 		break;
 	case 3:
-		if (end == true & bitRead(MEM_reg, 2) == true) COM_reg ^= (1 << 0); //direction return
+		if (end == true && bitRead(MEM_reg, 2) == true) COM_reg ^= (1 << 0); //direction return
 		break;
 
 	default: //stop stepper
-		if (end == true & bitRead(COM_reg, 4) == true) {
+		if (end == true && bitRead(COM_reg, 4) == true) {
 			COM_reg &= ~(1 << 4);
 			if (bitRead(MEM_reg, 2) == true | bitRead(COM_reg2, 0) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
@@ -764,7 +766,7 @@ void switches() {
 		}
 	}
 	else { //dus geen verandering en status is false dus knop ingedrukt gehouden
-		if (status == false & switchcount == 0) {
+		if (status == false && switchcount == 0) {
 			wait = 50;
 			if (bitRead(COM_reg, 6) == false)wait = wait + (10 * prgmode); //increase wait time in higher programs
 			if (counter[5] > wait) {
@@ -950,8 +952,9 @@ void slowevents() {
 		counter[4]++;
 	}
 	stepcount++;
-	if (stepcount > speed & bitRead(COM_reg, 1) == true) { //speed 2 = minimum
+	if (stepcount > speed && bitRead(COM_reg, 1) == true) { //speed 2 = minimum
 		stepcount = 0;
+		//step4();
 		steps(); //Steps=half stepper, step4=full stepper
 		SHIFT();
 	}
