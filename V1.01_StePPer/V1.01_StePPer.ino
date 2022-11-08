@@ -504,10 +504,10 @@ void steps() {
 	stopstep();
 }
 
- 
- 
+
+
 void step4() {
-//stepper in FULLstep mode
+	//stepper in FULLstep mode
 	byte step;
 	step = stepfase;
 

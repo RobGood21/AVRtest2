@@ -17,6 +17,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DecoderAVR", "DecoderAVR\De
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StePPer", "StePPer\StePPer.vcxproj", "{36641282-A787-427E-8726-014E7E57E796}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "V1.01_StePPer", "V1.01_StePPer\V1.01_StePPer.vcxproj", "{AB5F10E2-1F57-4AC6-9AF5-FC27133821A5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -39,6 +41,10 @@ Global
 		{36641282-A787-427E-8726-014E7E57E796}.Debug|x86.Build.0 = Debug|Win32
 		{36641282-A787-427E-8726-014E7E57E796}.Release|x86.ActiveCfg = Release|Win32
 		{36641282-A787-427E-8726-014E7E57E796}.Release|x86.Build.0 = Release|Win32
+		{AB5F10E2-1F57-4AC6-9AF5-FC27133821A5}.Debug|x86.ActiveCfg = Debug|Win32
+		{AB5F10E2-1F57-4AC6-9AF5-FC27133821A5}.Debug|x86.Build.0 = Debug|Win32
+		{AB5F10E2-1F57-4AC6-9AF5-FC27133821A5}.Release|x86.ActiveCfg = Release|Win32
+		{AB5F10E2-1F57-4AC6-9AF5-FC27133821A5}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
