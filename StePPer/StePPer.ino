@@ -22,6 +22,9 @@
 
 	V2.01
 	Geheel, pcb en programma aanpassen en uitbreiden juli2022
+	V2.02
+	De in te stellen afstand in positie mode enorm verruimd om draaien tot <380graden mogelijk te maken.
+
 
 
 */
@@ -50,8 +53,33 @@ byte DEK_Buf5[12];
 unsigned int DCCadres;
 
 byte COM_reg; //common flag register
+//bit0 richting
+//bit1 True stepper draait, false stopt
+//bit2
+//bit3 Wacht op DCC adres
+//bit4
+//bit5
+//bit6
+//bit7
 byte COM_reg2; //common flag register 2
+//bit0
+//bit1
+//bit2
+//bit3
+//bit4
+//bit5
+//bit6
+//bit7
 byte MEM_reg; //EEPROM memorie register
+//bit0
+//bit1
+//bit2
+//bit3
+//bit4
+//bit5
+//bit6
+//bit7
+
 byte shiftbyte;//databyte to shiftregister
 byte shiftled;//databyte status leds
 byte switchcount; //counter
@@ -70,6 +98,7 @@ signed int Targetposition; //target position for stepper
 
 byte speling = 50; //motoras speling
 
+unsigned long speedtimer;
 
 void setup()
 {
@@ -125,13 +154,14 @@ void MEM_read() {
 		EEPROM.update(11, speed);
 		delay(100);
 	}
-	Targetposition = EEPROM.read(12);
-	if (Targetposition == 0xFF) { //alleen na een factory reset
-		Targetposition = 50;
-		EEPROM.update(12, Targetposition);
+	EEPROM.get(20, Targetposition);
+	// Targetposition = EEPROM.read(12); V1.01
+	if (Targetposition == 0xFFFF) { //alleen na een factory reset V1.01 was 0xFF
+		Targetposition = 2000; //moet 600 zijn
+	//	EEPROM.update(12, Targetposition); //>8nov dit is niet nodig.
 		delay(100);
 	}
-	Targetposition = Targetposition * 10;
+	//Targetposition = Targetposition * 10; //>8nov niet nodig
 
 	speling = EEPROM.read(13);
 	if (speling == 0xFF) {
@@ -149,13 +179,13 @@ void MEM_read() {
 	}
 }
 void MEM_change() {
-	byte temp;
+	//int temp; //>8nov
 	EEPROM.update(10, MEM_reg);
 	delay(100);
 	EEPROM.update(11, speed);
 	delay(100);
-	temp = Targetposition / 10;
-	EEPROM.update(12, temp);
+	//temp = Targetposition / 10; //>8nov niet nodig
+	EEPROM.put(20, Targetposition);
 	delay(100);
 	EEPROM.update(13, speling);
 	delay(100);
@@ -405,16 +435,17 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 	else {
 		if (adres == DCCadres) {
 			if (cv == false) { //switch command
-				if (port ^ bitRead(MEM_reg, 3) == 1) {
-					//if (port == true) {
-					COM_reg |= (1 << 0);
+				if (port ^ bitRead(MEM_reg, 3) == 1) {   //(port |= MEM_reg & (1<<3)){ //>8nov 
+					//if (port == true) { //8nov
+					COM_reg |= (1 << 0); //richting
 					if (Currentposition == 0) COM_reg |= (1 << 1); //Start alleen vanuit een nulpositie, richting wisselen terwijl stepper draaid wel.
 				}
 				else {
-					COM_reg &= ~(1 << 0);
+					COM_reg &= ~(1 << 0); //richting instellen
 					COM_reg |= (1 << 1);
 					COM_reg |= (1 << 4);
 				}
+
 				switchstatus |= (1 << 2); //**is nodig anders start WA mode verkeerd, nog niet op demoplank getest.
 
 			}
@@ -426,7 +457,7 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 					}
 					break;
 				case 10: //position
-					Targetposition = value * 10;
+					Targetposition = value; // *10; //>8nov
 					MEM_change();
 					break;
 				case 11: //speed
@@ -569,7 +600,9 @@ void stopstep() {
 
 	default: //stop stepper
 		if (end == true && bitRead(COM_reg, 4) == true) {
+			
 			COM_reg &= ~(1 << 4);
+		
 			if (bitRead(MEM_reg, 2) == true | bitRead(COM_reg2, 0) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
 				COM_reg &= ~(1 << 1);
@@ -610,12 +643,14 @@ void SHIFT() {
 void switches() {
 	//handles all manual switch events
 	byte wait;
-	if (status != bitRead(switchstatus, switchcount)) {
+	if (status != bitRead(switchstatus, switchcount)) { //status is stand pin(switch), switchstatus, switchcount de vorige stand van de switch
 		if (status == false) { //switch pushed
 			switchstatus &= ~(1 << switchcount); //klopt eigenlijk niet 
 			switch (switchcount) {
 			case 0: //primaire switch op pcb
+
 				counter[5] = 0;
+
 				if (bitRead(MEM_reg, 1) == false) {
 					if (bitRead(switchstatus, 1) == false) { //beide knoppen moeten worden ingedrukt, alleen bij begin programma
 						COM_reg |= (1 << 5);
@@ -626,6 +661,8 @@ void switches() {
 					COM_reg |= (1 << 5);
 					//counter[5] = 0;
 				}
+
+
 
 				switch (prgmode) {
 				case 0:
@@ -653,6 +690,10 @@ void switches() {
 					break;
 				}
 				break;
+
+
+
+
 			case 1: //secundaire switch alleen extern aan te sluiten
 
 
@@ -667,7 +708,7 @@ void switches() {
 				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
 
-			case 2: //position switch	
+			case 2: //position switch HOME	
 				if (bitRead(COM_reg2, 0) == false) {
 					COM_reg2 |= (1 << 1);
 
@@ -678,9 +719,10 @@ void switches() {
 					else {
 						if (bitRead(MEM_reg, 2) == true) {
 							shiftbyte &= ~(15 << 4);
-							COM_reg &= ~(1 << 1); //stop stepper
+							COM_reg &= ~(1 << 1); //stopt stepper
 						}
 					}
+
 					Currentposition = 0;
 					COM_reg |= (1 << 4); //stepper in 0 position	
 					leddir();
@@ -747,7 +789,8 @@ void switches() {
 					if (bitRead(MEM_reg, 2) == false & bitRead(COM_reg2, 0) == false) {
 						//shiftbyte &= ~(15 << 4);
 						//COM_reg &= ~(1 << 1); //stop stepper
-						COM_reg ^= (1 << 0);
+
+						COM_reg ^= (1 << 0); //wisselt richting
 						if (bitRead(COM_reg, 0) == false) {
 							Targetposition = (Currentposition / 2) - speling;
 						}
@@ -809,7 +852,7 @@ void prg2() {
 	case 1:
 		COM_reg |= (1 << 0);
 		COM_reg |= (1 << 1);
-		speed = 50;
+		speed = speed*4; //8nov
 		prgfase++;
 		break;
 	case 2:
@@ -952,6 +995,10 @@ void slowevents() {
 		}
 		counter[4]++;
 	}
+	stePPer(); //>8nov
+}
+
+void stePPer() { //8nov
 	stepcount++;
 	if (stepcount > speed && bitRead(COM_reg, 1) == true) { //speed 2 = minimum
 		stepcount = 0;
@@ -960,6 +1007,8 @@ void slowevents() {
 		SHIFT();
 	}
 }
+
+
 void blink() {
 	//drives all kind of effects on control leds
 	if (bitRead(COM_reg, 7) == true) {
@@ -990,7 +1039,7 @@ void blink() {
 					}
 					else {
 						shiftled |= (1 << 1); //green on
-						shiftbyte &= ~(1 << 3);
+						shiftbyte &= ~(1 << 3); //red off
 					}
 				}
 				if (counter[2] == 4) {
@@ -1023,7 +1072,7 @@ void blink() {
 					counter[2] = 0;
 				}
 			}
-			if (counter[2] > 30)counter[2] = 0;
+			if (counter[2] > 30)counter[2] = 0; //>8nov was 30
 			break;
 		case 5:
 			shiftled ^= (1 << 1);
@@ -1035,7 +1084,7 @@ void blink() {
 				shiftbyte |= (1 << 3); //rode led
 			}
 
-			if (counter[2] == 20) {
+			if (counter[2] == 20) { //>8nov was 20
 				shiftled &= ~(1 << 1);
 				shiftbyte &= ~(1 << 3);
 				counter[2] = 0;
@@ -1048,6 +1097,17 @@ void blink() {
 }
 void loop() {
 	DEK_DCCh();
+
 	GPIOR2++; //use general purpose register as slow events counter
-	if (GPIOR2 == 0) slowevents();
+	if (GPIOR2 == 180) {
+		slowevents();
+		//GPIOR2 = 0; //nov8 om draaiing te versnellen
+	}
+
+	//if (micros() - speedtimer > 200) {
+	//	speedtimer = micros();
+	//	stePPer();
+	//}
+
+
 }
