@@ -23,7 +23,15 @@
 	V2.01
 	Geheel, pcb en programma aanpassen en uitbreiden juli2022
 	V2.02
+	Algemeen
+	Gebruik 3D holder draaid de draai richting, beweging om
+	Bugfixed
+	DCC niet goed werken in twee positie mode, opestarten en als de 1e dcc command  gelijk is aan de huidige stand, dan bleef
+	de motor draaien, homeswitch werd niet herkend.
+
+
 	De in te stellen afstand in positie mode enorm verruimd om draaien tot <380graden mogelijk te maken.
+	Snelheid verhoogd door in loop de slow events te versnellen met micros timer
 
 
 
@@ -55,9 +63,9 @@ unsigned int DCCadres;
 byte COM_reg; //common flag register
 //bit0 richting
 //bit1 True stepper draait, false stopt
-//bit2
+//bit2 init start?
 //bit3 Wacht op DCC adres
-//bit4
+//bit4 ??  voorwaarde voor starten
 //bit5
 //bit6
 //bit7
@@ -72,9 +80,9 @@ byte COM_reg2; //common flag register 2
 //bit7
 byte MEM_reg; //EEPROM memorie register
 //bit0
-//bit1
+//bit1 wel of niet keren?
 //bit2
-//bit3
+//bit3 start richting default 1
 //bit4
 //bit5
 //bit6
@@ -129,7 +137,7 @@ void setup()
 	switchstatus = 7; //clear status of switches
 	COM_reg |= (1 << 2); //start init
 }
-void MEM_clear() {
+void MEM_clear() { //factory reset
 	//clears 1e 100bytes of eeprom and restart
 	for (byte i = 0; i < 100; i++) {
 		EEPROM.update(i, 0xFF);
@@ -157,8 +165,8 @@ void MEM_read() {
 	EEPROM.get(20, Targetposition);
 	// Targetposition = EEPROM.read(12); V1.01
 	if (Targetposition == 0xFFFF) { //alleen na een factory reset V1.01 was 0xFF
-		Targetposition = 2000; //moet 600 zijn
-	//	EEPROM.update(12, Targetposition); //>8nov dit is niet nodig.
+		Targetposition = 600; //moet 600 zijn
+		//	EEPROM.update(12, Targetposition); //>8nov dit is niet nodig.
 		delay(100);
 	}
 	//Targetposition = Targetposition * 10; //>8nov niet nodig
@@ -196,7 +204,7 @@ void leddir() {
 	//sets state of control leds
 
 	if (prgmode == 0 && ledmode == 0) {
-		if (bitRead(COM_reg, 0) == false) {
+		if (bitRead(COM_reg, 0) == false) { //draai richting
 			shiftbyte |= (1 << 3);
 			//shiftled &= ~(3 << 0);
 			shiftled &= ~(1 << 1);
@@ -434,22 +442,30 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 	}
 	else {
 		if (adres == DCCadres) {
-			if (cv == false) { //switch command
-				if (port ^ bitRead(MEM_reg, 3) == 1) {   //(port |= MEM_reg & (1<<3)){ //>8nov 
-					//if (port == true) { //8nov
+			if (cv == false) { //switch commandoos 
+
+				//if (port ^ bitRead(MEM_reg, 3) == 1){ //van voor 8nov bit 3 is de ingestelde startrichting
+
+				if (port == true) { //8nov richting van home switch
 					COM_reg |= (1 << 0); //richting
-					if (Currentposition == 0) COM_reg |= (1 << 1); //Start alleen vanuit een nulpositie, richting wisselen terwijl stepper draaid wel.
+					if (Currentposition == 0) COM_reg |= (1 << 1); //Start
 				}
-				else {
-					COM_reg &= ~(1 << 0); //richting instellen
-					COM_reg |= (1 << 1);
-					COM_reg |= (1 << 4);
+				else { //richting naar home switch
+					if (Currentposition |= 0) { //niet start als al in de home positie
+						COM_reg &= ~(1 << 0); //richting instellen
+						COM_reg |= (1 << 1); //start
+						COM_reg |= (1 << 4); //? 
+					}
+
 				}
 
-				switchstatus |= (1 << 2); //**is nodig anders start WA mode verkeerd, nog niet op demoplank getest.
+
+				// switchstatus |= (1 << 2); //**is nodig anders start WA mode verkeerd, nog niet op demoplank getest.
+				//>8nov nee dit kan niet reset hier de status van de homeswitch, nog niet duidelijk waarom dit er in is gezet. 
+
 
 			}
-			else {//CV commando
+			else {//CV commando's
 				switch (cv) {
 				case 8: //factory reset
 					if (value == 10) {
@@ -457,7 +473,7 @@ void APP_exe(boolean type, unsigned int adres, unsigned int decoder, unsigned in
 					}
 					break;
 				case 10: //position
-					Targetposition = value; // *10; //>8nov
+					Targetposition = value * 10; //>8nov
 					MEM_change();
 					break;
 				case 11: //speed
@@ -535,10 +551,10 @@ void steps() {
 	stopstep();
 }
 
- 
- 
+
+
 void step4() {
-//stepper in FULLstep mode
+	//stepper in FULLstep mode
 	byte step;
 	step = stepfase;
 
@@ -561,7 +577,7 @@ void step4() {
 		break;
 	}
 
-	if (bitRead(COM_reg, 0) == true) {
+	if (bitRead(COM_reg, 0) == true) { //draairichting bepaald door com_reg bit 0
 		Currentposition++;
 		stepfase++;
 		if (stepfase > 3)stepfase = 0;
@@ -599,17 +615,17 @@ void stopstep() {
 		break;
 
 	default: //stop stepper
-		if (end == true && bitRead(COM_reg, 4) == true) {
-			
-			COM_reg &= ~(1 << 4);
-		
+		if (end == true && bitRead(COM_reg, 4) == true) { //?
+
+			COM_reg &= ~(1 << 4); //reset bit 4 flag
+
 			if (bitRead(MEM_reg, 2) == true | bitRead(COM_reg2, 0) == true) { //stop stepper only in wisselaandrijving mode 
 				shiftbyte &= ~(15 << 4);
-				COM_reg &= ~(1 << 1);
+				COM_reg &= ~(1 << 1); //stop
 				COM_reg2 &= ~(1 << 0);
 				COM_reg2 &= ~(1 << 1);
 			}
-			leddir();
+			leddir(); //richting leds instellen
 		}
 		break;
 	}
@@ -651,7 +667,8 @@ void switches() {
 
 				counter[5] = 0;
 
-				if (bitRead(MEM_reg, 1) == false) {
+				if (bitRead(MEM_reg, 1) == false) { //8nov twee knoppen ingedrukt nodig (start program mode)
+
 					if (bitRead(switchstatus, 1) == false) { //beide knoppen moeten worden ingedrukt, alleen bij begin programma
 						COM_reg |= (1 << 5);
 						//counter[5] = 0;
@@ -663,9 +680,8 @@ void switches() {
 				}
 
 
-
 				switch (prgmode) {
-				case 0:
+				case 0:  //in bedrijf 
 					if (bitRead(MEM_reg, 1) == true) {
 						COM_reg ^= (1 << 0); //toggle direction
 					}
@@ -673,14 +689,16 @@ void switches() {
 						COM_reg &= ~(1 << 0); //set clockwise.
 						if (bitRead(MEM_reg, 2) == true)  switchstatus |= (1 << 2); //27-9 niet in continue mode
 					}
+					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4); //bij richting 0 set flag bit 4 
 
-					if (bitRead(COM_reg, 0) == false)COM_reg |= (1 << 4);
 
-					COM_reg |= (1 << 1); //start stepper
-					if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
-					COM_reg2 &= ~(1 << 1); //flag first position make before action on break
+					COM_reg |= (1 << 1); //start stepper					
+					if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction leds in continue mode
 
+					COM_reg2 &= ~(1 << 1); //reset flag first position make before action on break?
 					break;
+
+
 
 				case 1: //change startup direction
 					break;
@@ -690,7 +708,6 @@ void switches() {
 					break;
 				}
 				break;
-
 
 
 
@@ -707,6 +724,7 @@ void switches() {
 
 				if (bitRead(MEM_reg, 2) == false)leddir(); //to set direction in continue mode
 				break;
+
 
 			case 2: //position switch HOME	
 				if (bitRead(COM_reg2, 0) == false) {
@@ -732,7 +750,7 @@ void switches() {
 			}
 		}
 
-		else { //switch released
+		else { //switch released, loslaten van de knop doet de programmering, aanpassen para meters
 			switchstatus |= (1 << switchcount); //klopt niet eigenlijk, switchcount is decimal, switchstatus binair tot 3 kan dit
 			switch (switchcount) {
 			case 0: //
@@ -852,7 +870,7 @@ void prg2() {
 	case 1:
 		COM_reg |= (1 << 0);
 		COM_reg |= (1 << 1);
-		speed = speed*4; //8nov
+		speed = speed * 4; //8nov
 		prgfase++;
 		break;
 	case 2:
@@ -1099,9 +1117,9 @@ void loop() {
 	DEK_DCCh();
 
 	GPIOR2++; //use general purpose register as slow events counter
-	if (GPIOR2 == 180) {
+	if (GPIOR2 == 150) { //snelheid van het geheel, ook draaisnelheid, ook knippereffecten enz.
 		slowevents();
-		//GPIOR2 = 0; //nov8 om draaiing te versnellen
+		GPIOR2 = 0; //nov8 om draaiing te versnellen
 	}
 
 	//if (micros() - speedtimer > 200) {
